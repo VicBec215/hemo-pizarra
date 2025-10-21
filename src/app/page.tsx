@@ -89,17 +89,11 @@ function InlineEditorCard({
   onSave: (vals: { name: string; room: string; dx: string; proc: ProcKey }) => void;
   onCancel: () => void;
 }) {
-  const [name, setName]   = useState(initial.name);
-  const [room, setRoom]   = useState(initial.room);
-  const [dx, setDx]       = useState(initial.dx);     // texto libre
-  const [proc, setProc]   = useState<ProcKey>(initial.proc);
-
-  useEffect(() => {
-    setName(initial.name);
-    setRoom(initial.room);
-    setDx(initial.dx);
-    setProc(initial.proc);
-  }, [initial]);
+  // Importante: inicializamos una sola vez; NO sincronizamos con useEffect
+  const [name, setName] = useState(initial.name);
+  const [room, setRoom] = useState(initial.room);
+  const [dx, setDx] = useState(initial.dx); // texto libre
+  const [proc, setProc] = useState<ProcKey>(initial.proc);
 
   return (
     <div className="bg-white rounded-xl border p-3 flex flex-col gap-3 shadow-sm">
@@ -109,7 +103,11 @@ function InlineEditorCard({
           <button className="p-1 rounded hover:bg-gray-100" title="Cancelar" onClick={onCancel}>
             <X className="w-4 h-4" />
           </button>
-          <button className="p-1 rounded hover:bg-gray-100" title="Guardar" onClick={() => onSave({ name, room, dx, proc })}>
+          <button
+            className="p-1 rounded hover:bg-gray-100"
+            title="Guardar"
+            onClick={() => onSave({ name, room, dx, proc })}
+          >
             <Save className="w-4 h-4" />
           </button>
         </div>
@@ -118,28 +116,46 @@ function InlineEditorCard({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         <label className="text-xs">
           Nombre/ID (evitar nombre completo)
-          <input className="mt-1 w-full border rounded px-2 py-1"
-            value={name} onChange={(e) => setName(e.target.value)} placeholder="Iniciales o ID" />
+          <input
+            className="mt-1 w-full border rounded px-2 py-1"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Iniciales o ID"
+          />
         </label>
         <label className="text-xs">
           Habitación
-          <input className="mt-1 w-full border rounded px-2 py-1"
-            value={room} onChange={(e) => setRoom(e.target.value)} placeholder="312B" />
+          <input
+            className="mt-1 w-full border rounded px-2 py-1"
+            value={room}
+            onChange={(e) => setRoom(e.target.value)}
+            placeholder="312B"
+          />
         </label>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         <label className="text-xs">
           Diagnóstico (texto libre)
-          <input className="mt-1 w-full border rounded px-2 py-1"
-            value={dx} onChange={(e) => setDx(e.target.value)} placeholder="p. ej., SCA, CHD..." />
+          <input
+            className="mt-1 w-full border rounded px-2 py-1"
+            value={dx}
+            onChange={(e) => setDx(e.target.value)}
+            placeholder="p. ej., SCA, CHD..."
+          />
         </label>
+
         <label className="text-xs">
           Procedimiento
-          <select className="mt-1 w-full border rounded px-2 py-1 bg-white"
-            value={proc} onChange={(e) => setProc(e.target.value as ProcKey)}>
+          <select
+            className="mt-1 w-full border rounded px-2 py-1 bg-white"
+            value={proc}
+            onChange={(e) => setProc(e.target.value as ProcKey)}
+          >
             {PROCS.map((o) => (
-              <option key={o} value={o}>{o}</option>
+              <option key={o} value={o}>
+                {o}
+              </option>
             ))}
           </select>
         </label>
