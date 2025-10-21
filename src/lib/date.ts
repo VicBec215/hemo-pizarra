@@ -1,3 +1,5 @@
+// src/lib/date.ts
+
 export function startOfWeekMonday(d = new Date()) {
   const x = new Date(d);
   const day = (x.getDay() + 6) % 7; // 0=Mon..6=Sun
@@ -10,14 +12,19 @@ export function addDays(d: Date, n: number) {
   x.setDate(x.getDate() + n);
   return x;
 }
+
+// ⬇️ NUEVO: ISO local (no UTC)
 export function toISODate(d: Date) {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 export const ROWS = ['Sala 1','Sala 2','Sala 3','Tarde'] as const;
 export type RowKey = typeof ROWS[number];
 
-/** Procedimientos (lista cerrada) */
+// Tu PROCS igual que los dejaste
 export const PROCS = [
   'Coronaria',
   'C.Derecho',
@@ -32,3 +39,4 @@ export const PROCS = [
   'Otros',
 ] as const;
 export type ProcKey = typeof PROCS[number];
+

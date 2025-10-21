@@ -190,32 +190,43 @@ function AuthButtons() {
 
   return (
     <div className="flex gap-2 items-center">
-      <input className="border rounded px-2 py-1 text-sm" placeholder="tu-email@hospital.es"
-             value={email} onChange={(e) => setEmail(e.target.value)} />
-      <button className="px-3 py-1 rounded border bg-white text-sm" onClick={async () => {
-        try {
-          if (!email) { alert('Introduce un email'); return; }
-          const { error } = await supabase.auth.signInWithOtp({
-            email,
-            options: { emailRedirectTo: window.location.origin },
-          });
-          if (error) throw error;
-          alert('Te hemos enviado un enlace de acceso. Revisa tu email.');
-        } catch (e) { showErr(e); }
-      }}>
+      <input
+        className="border rounded px-2 py-1 text-sm"
+        placeholder="tu-email@hospital.es"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+      />
+      <button
+        className="px-3 py-1 rounded border bg-white text-sm"
+        onClick={async () => {
+          try {
+            if (!email) { alert('Introduce un email'); return; }
+            const { error } = await supabase.auth.signInWithOtp({
+              email,
+              options: { emailRedirectTo: window.location.origin },
+            });
+            if (error) throw error;
+            alert('Te hemos enviado un enlace de acceso. Revisa tu email.');
+          } catch (e) { showErr(e); }
+        }}
+      >
         Entrar por email
       </button>
 
-      {/* Eliminado "Entrar con Microsoft" como pediste */}
+      {/* <-- NO HAY botón de Microsoft aquí */}
 
-      <button className="px-3 py-1 rounded border bg-white text-sm" onClick={async () => {
-        try { await supabase.auth.signOut(); } catch (e) { showErr(e); }
-      }}>
+      <button
+        className="px-3 py-1 rounded border bg-white text-sm"
+        onClick={async () => {
+          try { await supabase.auth.signOut(); } catch (e) { showErr(e); }
+        }}
+      >
         Salir
       </button>
     </div>
   );
 }
+
 
 function AuthBlock() {
   return (
