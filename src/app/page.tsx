@@ -321,56 +321,63 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
 
   /** Mover una posición hacia arriba dentro de la misma celda (swap con anterior) */
     /** Mover una posición hacia arriba (swap con anterior) */
-  const moveOneUp = async (it: Item) => {
-    const cell = items
-      .filter(i => i.day === it.day && i.row === it.row)
-      .sort((a, b) => a.ord - b.ord);
+  /** Mover una posición hacia arriba (swap con anterior) usando parking INTEGER */
+const moveOneUp = async (it: Item) => {
+  const cell = items
+    .filter(i => i.day === it.day && i.row === it.row)
+    .sort((a, b) => a.ord - b.ord);
 
-    const idx = cell.findIndex(i => i.id === it.id);
-    if (idx <= 0) return; // ya está el primero
+  const idx = cell.findIndex(i => i.id === it.id);
+  if (idx <= 0) return; // ya es el primero
 
-    const prev = cell[idx - 1];
+  const prev = cell[idx - 1];
+  const oldItOrd = it.ord;
+  const oldPrevOrd = prev.ord;
 
-    try {
-      // 1) muevo 'it' a un ord temporal entre prev e it
-      const tempOrd = (prev.ord + it.ord) / 2;
-      await updateItem(it.id, { ord: tempOrd });
+  // valor de parking: más pequeño que cualquiera en la celda
+  const minOrd = cell[0]?.ord ?? 0;
+  const PARK = minOrd - 100000; // entero
 
-      // 2) coloco 'prev' en el ord original de 'it'
-      await updateItem(prev.id, { ord: it.ord });
+  try {
+    // 1) aparco 'it' fuera del rango para no colisionar
+    await updateItem(it.id, { ord: PARK });
+    // 2) muevo 'prev' al ord original de 'it'
+    await updateItem(prev.id, { ord: oldItOrd });
+    // 3) coloco 'it' en el ord original de 'prev'
+    await updateItem(it.id, { ord: oldPrevOrd });
+  } catch (e) {
+    showErr(e);
+  }
+};
 
-      // 3) coloco 'it' en el ord original de 'prev'
-      await updateItem(it.id, { ord: prev.ord });
-    } catch (e) {
-      showErr(e);
-    }
-  };
+/** Mover una posición hacia abajo (swap con siguiente) usando parking INTEGER */
+const moveOneDown = async (it: Item) => {
+  const cell = items
+    .filter(i => i.day === it.day && i.row === it.row)
+    .sort((a, b) => a.ord - b.ord);
 
-  /** Mover una posición hacia abajo (swap con siguiente) */
-  const moveOneDown = async (it: Item) => {
-    const cell = items
-      .filter(i => i.day === it.day && i.row === it.row)
-      .sort((a, b) => a.ord - b.ord);
+  const idx = cell.findIndex(i => i.id === it.id);
+  if (idx === -1 || idx >= cell.length - 1) return; // ya es el último
 
-    const idx = cell.findIndex(i => i.id === it.id);
-    if (idx === -1 || idx >= cell.length - 1) return; // ya es el último
+  const next = cell[idx + 1];
+  const oldItOrd = it.ord;
+  const oldNextOrd = next.ord;
 
-    const next = cell[idx + 1];
+  // parking: más grande que cualquiera en la celda
+  const maxOrd = cell[cell.length - 1]?.ord ?? 0;
+  const PARK = maxOrd + 100000; // entero
 
-    try {
-      // 1) muevo 'it' a ord temporal entre it y next
-      const tempOrd = (it.ord + next.ord) / 2;
-      await updateItem(it.id, { ord: tempOrd });
-
-      // 2) coloco 'next' en el ord original de 'it'
-      await updateItem(next.id, { ord: it.ord });
-
-      // 3) coloco 'it' en el ord original de 'next'
-      await updateItem(it.id, { ord: next.ord });
-    } catch (e) {
-      showErr(e);
-    }
-  };
+  try {
+    // 1) aparco 'it'
+    await updateItem(it.id, { ord: PARK });
+    // 2) muevo 'next' al ord original de 'it'
+    await updateItem(next.id, { ord: oldItOrd });
+    // 3) coloco 'it' en el ord original de 'next'
+    await updateItem(it.id, { ord: oldNextOrd });
+  } catch (e) {
+    showErr(e);
+  }
+};
 
   return (
     <div className="space-y-3">
