@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import {
   startOfWeekMonday,
@@ -34,19 +34,42 @@ import {
   ChevronsDown,
   Save,
   X,
+  Pencil,
+  Download,
 } from 'lucide-react';
 
-/** Errores legibles */
-function showErr(e: any) {
+/** Util: clases para badges de procedimiento */
+function procColor(proc: ProcKey): string {
+  const lower = proc.toLowerCase();
+  // Verde: Coronaria, C.Derecho
+  if (lower === 'coronaria' || lower === 'c.derecho') return 'bg-green-100 text-green-800 border-green-300';
+  // Naranja: ICP
+  if (lower === 'icp') return 'bg-orange-100 text-orange-800 border-orange-300';
+  // Rojo: Oclusión crónica
+  if (lower === 'oclusión crónica' || lower === 'oclusion crónica' || lower === 'oclusión cronica' || lower === 'oclusion cronica') {
+    return 'bg-red-100 text-red-800 border-red-300';
+  }
+  // Morado: TAVI, Mitraclip, Triclip, Orejuela, FOP, CIA
+  if (['tavi','mitraclip','triclip','orejuela','fop','cia'].includes(lower)) {
+    return 'bg-purple-100 text-purple-800 border-purple-300';
+  }
+  // Negro (neutro oscuro): Otros (usamos gris oscuro para buena legibilidad)
+  return 'bg-gray-200 text-gray-900 border-gray-300';
+}
+
+/** Errores legibles (sin 'any') */
+function showErr(e: unknown) {
   try {
+    const obj = e as Record<string, unknown>;
     const msg =
-      e?.message ||
-      e?.error?.message ||
-      e?.details ||
-      e?.hint ||
-      e?.code ||
-      JSON.stringify(e, Object.getOwnPropertyNames(e) as any) ||
-      JSON.stringify(e);
+      (obj?.message as string) ||
+      (obj?.['error'] as any)?.message ||
+      (obj?.details as string) ||
+      (obj?.hint as string) ||
+      (obj?.code as string) ||
+      JSON.stringify(obj, Object.getOwnPropertyNames(obj ?? {}) as any) ||
+      String(e);
+    // eslint-disable-next-line no-console
     console.error('ERROR:', e);
     alert(msg || 'Error desconocido');
   } catch {
@@ -54,38 +77,39 @@ function showErr(e: any) {
   }
 }
 
-/** Tarjeta inline para crear un paciente dentro de la celda */
+/** Tarjeta inline para crear/editar un paciente */
 function InlineEditorCard({
-  defaultProc = 'Coronaria',
+  title = 'Nuevo paciente',
+  initial = { name: '', room: '', dx: '', proc: 'Coronaria' as ProcKey },
   onSave,
   onCancel,
 }: {
-  defaultProc?: ProcKey;
+  title?: string;
+  initial?: { name: string; room: string; dx: string; proc: ProcKey };
   onSave: (vals: { name: string; room: string; dx: string; proc: ProcKey }) => void;
   onCancel: () => void;
 }) {
-  const [name, setName] = useState('');
-  const [room, setRoom] = useState('');
-  const [dx, setDx] = useState(''); // texto libre
-  const [proc, setProc] = useState<ProcKey>(defaultProc as ProcKey);
+  const [name, setName]   = useState(initial.name);
+  const [room, setRoom]   = useState(initial.room);
+  const [dx, setDx]       = useState(initial.dx);     // texto libre
+  const [proc, setProc]   = useState<ProcKey>(initial.proc);
+
+  useEffect(() => {
+    setName(initial.name);
+    setRoom(initial.room);
+    setDx(initial.dx);
+    setProc(initial.proc);
+  }, [initial]);
 
   return (
     <div className="bg-white rounded-xl border p-3 flex flex-col gap-3 shadow-sm">
       <div className="flex items-center justify-between">
-        <div className="text-sm font-semibold">Nuevo paciente</div>
+        <div className="text-sm font-semibold">{title}</div>
         <div className="flex items-center gap-1">
-          <button
-            className="p-1 rounded hover:bg-gray-100"
-            title="Cancelar"
-            onClick={onCancel}
-          >
+          <button className="p-1 rounded hover:bg-gray-100" title="Cancelar" onClick={onCancel}>
             <X className="w-4 h-4" />
           </button>
-          <button
-            className="p-1 rounded hover:bg-gray-100"
-            title="Guardar"
-            onClick={() => onSave({ name, room, dx, proc })}
-          >
+          <button className="p-1 rounded hover:bg-gray-100" title="Guardar" onClick={() => onSave({ name, room, dx, proc })}>
             <Save className="w-4 h-4" />
           </button>
         </div>
@@ -94,46 +118,28 @@ function InlineEditorCard({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         <label className="text-xs">
           Nombre/ID (evitar nombre completo)
-          <input
-            className="mt-1 w-full border rounded px-2 py-1"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Iniciales o ID"
-          />
+          <input className="mt-1 w-full border rounded px-2 py-1"
+            value={name} onChange={(e) => setName(e.target.value)} placeholder="Iniciales o ID" />
         </label>
         <label className="text-xs">
           Habitación
-          <input
-            className="mt-1 w-full border rounded px-2 py-1"
-            value={room}
-            onChange={(e) => setRoom(e.target.value)}
-            placeholder="312B"
-          />
+          <input className="mt-1 w-full border rounded px-2 py-1"
+            value={room} onChange={(e) => setRoom(e.target.value)} placeholder="312B" />
         </label>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         <label className="text-xs">
           Diagnóstico (texto libre)
-          <input
-            className="mt-1 w-full border rounded px-2 py-1"
-            value={dx}
-            onChange={(e) => setDx(e.target.value)}
-            placeholder="p. ej., SCA, CHD, etc."
-          />
+          <input className="mt-1 w-full border rounded px-2 py-1"
+            value={dx} onChange={(e) => setDx(e.target.value)} placeholder="p. ej., SCA, CHD..." />
         </label>
-
         <label className="text-xs">
           Procedimiento
-          <select
-            className="mt-1 w-full border rounded px-2 py-1 bg-white"
-            value={proc}
-            onChange={(e) => setProc(e.target.value as ProcKey)}
-          >
+          <select className="mt-1 w-full border rounded px-2 py-1 bg-white"
+            value={proc} onChange={(e) => setProc(e.target.value as ProcKey)}>
             {PROCS.map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
+              <option key={o} value={o}>{o}</option>
             ))}
           </select>
         </label>
@@ -148,12 +154,8 @@ export default function Page() {
 
   useEffect(() => {
     supabase.auth.getSession().then(() => setSessionReady(true));
-    const { data: sub } = supabase.auth.onAuthStateChange(() =>
-      setSessionReady(true)
-    );
-    return () => {
-      sub.subscription.unsubscribe();
-    };
+    const { data: sub } = supabase.auth.onAuthStateChange(() => setSessionReady(true));
+    return () => { sub.subscription.unsubscribe(); };
   }, []);
 
   useEffect(() => {
@@ -172,16 +174,10 @@ export default function Page() {
 function Header({ role }: { role: 'editor' | 'viewer' | 'unknown' }) {
   return (
     <div className="mb-4 flex justify-between items-center">
-      <div className="text-xl font-semibold">
-        Agenda Hemodinámica — Pizarra semanal
-      </div>
+      <div className="text-xl font-semibold">Agenda Hemodinámica — Pizarra semanal</div>
       <div className="flex gap-2 items-center">
         <span className="text-sm px-2 py-1 border rounded-full bg-white">
-          {role === 'editor'
-            ? 'Editor'
-            : role === 'viewer'
-            ? 'Solo lectura'
-            : 'No autenticado'}
+          {role === 'editor' ? 'Editor' : role === 'viewer' ? 'Solo lectura' : 'No autenticado'}
         </span>
         <AuthButtons />
       </div>
@@ -194,59 +190,27 @@ function AuthButtons() {
 
   return (
     <div className="flex gap-2 items-center">
-      {/* Login por email (enlace mágico) */}
-      <input
-        className="border rounded px-2 py-1 text-sm"
-        placeholder="tu-email@hospital.es"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-      />
-      <button
-        className="px-3 py-1 rounded border bg-white text-sm"
-        onClick={async () => {
-          try {
-            if (!email) {
-              alert('Introduce un email');
-              return;
-            }
-            const { error } = await supabase.auth.signInWithOtp({
-              email,
-              options: { emailRedirectTo: window.location.origin },
-            });
-            if (error) throw error;
-            alert('Te hemos enviado un enlace de acceso. Revisa tu email.');
-          } catch (e: any) {
-            showErr(e);
-          }
-        }}
-      >
+      <input className="border rounded px-2 py-1 text-sm" placeholder="tu-email@hospital.es"
+             value={email} onChange={(e) => setEmail(e.target.value)} />
+      <button className="px-3 py-1 rounded border bg-white text-sm" onClick={async () => {
+        try {
+          if (!email) { alert('Introduce un email'); return; }
+          const { error } = await supabase.auth.signInWithOtp({
+            email,
+            options: { emailRedirectTo: window.location.origin },
+          });
+          if (error) throw error;
+          alert('Te hemos enviado un enlace de acceso. Revisa tu email.');
+        } catch (e) { showErr(e); }
+      }}>
         Entrar por email
       </button>
 
-      {/* Botón SSO Microsoft (actívalo en Supabase → Auth → Providers → Azure) */}
-      <button
-        className="px-3 py-1 rounded border bg-white text-sm"
-        onClick={async () => {
-          try {
-            await supabase.auth.signInWithOAuth({ provider: 'azure' });
-          } catch (e: any) {
-            showErr(e);
-          }
-        }}
-      >
-        Entrar con Microsoft
-      </button>
+      {/* Eliminado "Entrar con Microsoft" como pediste */}
 
-      <button
-        className="px-3 py-1 rounded border bg-white text-sm"
-        onClick={async () => {
-          try {
-            await supabase.auth.signOut();
-          } catch (e: any) {
-            showErr(e);
-          }
-        }}
-      >
+      <button className="px-3 py-1 rounded border bg-white text-sm" onClick={async () => {
+        try { await supabase.auth.signOut(); } catch (e) { showErr(e); }
+      }}>
         Salir
       </button>
     </div>
@@ -257,40 +221,31 @@ function AuthBlock() {
   return (
     <div className="border rounded-lg bg-white p-6">
       <div className="mb-2 font-medium">Accede para ver la pizarra</div>
-      <div className="text-sm text-gray-600">
-        Usa “Entrar por email” o “Entrar con Microsoft”.
-      </div>
+      <div className="text-sm text-gray-600">Usa “Entrar por email”.</div>
     </div>
   );
 }
 
 function Board({ role }: { role: 'editor' | 'viewer' }) {
-  const [weekStart, setWeekStart] = useState<Date>(() =>
-    startOfWeekMonday(new Date())
-  );
+  const [weekStart, setWeekStart] = useState<Date>(() => startOfWeekMonday(new Date()));
   const [items, setItems] = useState<Item[]>([]);
   const [search, setSearch] = useState('');
 
-  // draft de alta inline: {day,row} de la celda que está editando
-  const [draftCell, setDraftCell] = useState<{ day: string; row: RowKey } | null>(
-    null
-  );
+  // alta inline: {day,row} de la celda que está editando (nuevo)
+  const [draftCell, setDraftCell] = useState<{ day: string; row: RowKey } | null>(null);
+  // edición inline de un item existente
+  const [editId, setEditId] = useState<string | null>(null);
 
-  const days = useMemo(
-    () => Array.from({ length: 5 }, (_, i) => addDays(weekStart, i)),
-    [weekStart]
-  );
+  const days = useMemo(() => Array.from({ length: 5 }, (_, i) => addDays(weekStart, i)), [weekStart]);
   const dayKeys = useMemo(() => days.map(toISODate), [days]);
+  const todayISO = toISODate(new Date());
 
-  const reload = async () => setItems(await listWeek(toISODate(weekStart)));
-  useEffect(() => {
-    reload();
+  const reload = useCallback(async () => {
+    setItems(await listWeek(toISODate(weekStart)));
   }, [weekStart]);
 
-  useEffect(() => {
-    const unsub = subscribeItems(reload);
-    return () => unsub();
-  }, [weekStart]);
+  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => { const unsub = subscribeItems(reload); return () => unsub(); }, [reload]);
 
   const canEdit = role === 'editor';
 
@@ -299,61 +254,81 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
   const FIRST_COL_WIDTH = 160; // px
   const minWidth = FIRST_COL_WIDTH + 5 * DAY_COL_WIDTH; // 160 + 5*320 = 1760
 
+  /** Exportar CSV de la semana visible */
+  function exportCSV() {
+    // Cabecera
+    const rows: string[] = [];
+    const header = ['Día', 'Sala/Turno', 'Orden', 'Nombre/ID', 'Habitación', 'Diagnóstico', 'Procedimiento'];
+    rows.push(header.map(escapeCSV).join(','));
+
+    // Por cada día/sala, en orden
+    for (const day of dayKeys) {
+      for (const row of ROWS) {
+        const cell = items
+          .filter((i) => i.day === day && i.row === row)
+          .sort((a, b) => a.ord - b.ord);
+        cell.forEach((it, idx) => {
+          const line = [
+            day,
+            row,
+            String(idx + 1),
+            it.name ?? '',
+            it.room ?? '',
+            it.dx ?? '',
+            it.proc ?? '',
+          ];
+          rows.push(line.map(escapeCSV).join(','));
+        });
+      }
+    }
+
+    const blob = new Blob(["\uFEFF" + rows.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `pizarra_${dayKeys[0]}_a_${dayKeys[4]}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <button
-          className="px-2 py-1 border rounded bg-white"
-          onClick={() => setWeekStart(addDays(weekStart, -7))}
-        >
+        <button className="px-2 py-1 border rounded bg-white" onClick={() => setWeekStart(addDays(weekStart, -7))}>
           <ArrowLeft className="inline w-4 h-4" /> Semana anterior
         </button>
-        <button
-          className="px-2 py-1 border rounded bg-white"
-          onClick={() => setWeekStart(startOfWeekMonday(new Date()))}
-        >
+        <button className="px-2 py-1 border rounded bg-white" onClick={() => setWeekStart(startOfWeekMonday(new Date()))}>
           <Calendar className="inline w-4 h-4" /> Esta semana
         </button>
-        <button
-          className="px-2 py-1 border rounded bg-white"
-          onClick={() => setWeekStart(addDays(weekStart, 7))}
-        >
+        <button className="px-2 py-1 border rounded bg-white" onClick={() => setWeekStart(addDays(weekStart, 7))}>
           Siguiente semana <ArrowRight className="inline w-4 h-4" />
         </button>
-        <input
-          className="ml-auto border rounded px-2 py-1"
-          placeholder="Buscar…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+
+        <input className="ml-auto border rounded px-2 py-1" placeholder="Buscar…" value={search} onChange={(e) => setSearch(e.target.value)} />
+
+        <button className="px-2 py-1 border rounded bg-white flex items-center gap-1" onClick={exportCSV} title="Exportar semana en CSV">
+          <Download className="w-4 h-4" /> Exportar CSV
+        </button>
       </div>
 
-      {/* Contenedor con scroll horizontal + scroll táctil suave */}
+      {/* Contenedor con scroll horizontal + scroll táctil */}
       <div className="border rounded-lg overflow-x-auto touch-pan-x">
         {/* Ancho mínimo para que quepa todo y se pueda hacer scroll */}
         <div className={`min-w-[${minWidth}px]`}>
-          <div
-            className="grid"
-            style={{
-              gridTemplateColumns: `${FIRST_COL_WIDTH}px repeat(5, ${DAY_COL_WIDTH}px)`,
-            }}
-          >
+          <div className="grid"
+               style={{ gridTemplateColumns: `${FIRST_COL_WIDTH}px repeat(5, ${DAY_COL_WIDTH}px)` }}>
             {/* Cabecera */}
             <div className="bg-gray-100 border-b px-3 py-2 font-medium sticky top-0 left-0 z-20">
               Sala/Turno
             </div>
-            {days.map((d, i) => (
-              <div
-                key={i}
-                className="bg-gray-100 border-b px-3 py-2 font-medium sticky top-0 z-10"
-              >
-                {d.toLocaleDateString('es-ES', {
-                  weekday: 'short',
-                  day: '2-digit',
-                  month: '2-digit',
-                })}
-              </div>
-            ))}
+            {days.map((d, i) => {
+              const isToday = toISODate(d) === todayISO;
+              return (
+                <div key={i}
+                     className={`border-b px-3 py-2 font-medium sticky top-0 z-10 ${isToday ? 'bg-red-50 text-red-700' : 'bg-gray-100'}`}>
+                  {d.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: '2-digit' })}
+                </div>
+              );
+            })}
 
             {/* Filas */}
             {ROWS.map((row) => (
@@ -366,10 +341,10 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
                 search={search}
                 draftCell={draftCell}
                 setDraftCell={setDraftCell}
-                onAdd={async (day) => {
-                  if (!canEdit) return;
-                  setDraftCell({ day, row });
-                }}
+                editId={editId}
+                setEditId={setEditId}
+                todayISO={todayISO}
+                onAdd={(day) => { if (!canEdit) return; setDraftCell({ day, row }); }}
                 onSubmitAdd={async (day, values) => {
                   if (!canEdit) return;
                   try {
@@ -380,43 +355,40 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
                       proc: values.proc as ProcKey,
                       day,
                       row,
-                    }); // ord = max+1 (sin triggers)
+                    });
                     setDraftCell(null);
-                  } catch (e: any) {
-                    showErr(e);
-                  }
+                  } catch (e) { showErr(e); }
                 }}
                 onCancelAdd={() => setDraftCell(null)}
+                onSaveEdit={async (it, values) => {
+                  try {
+                    await updateItem(it.id, {
+                      name: values.name,
+                      room: values.room,
+                      dx: values.dx,
+                      proc: values.proc,
+                    });
+                    setEditId(null);
+                  } catch (e) { showErr(e); }
+                }}
                 onMoveUp={async (it) => {
                   if (!canEdit) return;
-                  try {
-                    const min = await getMinOrd(it.day, it.row);
-                    await updateItem(it.id, { ord: min - 1 }); // por delante
-                  } catch (e: any) {
-                    showErr(e);
-                  }
+                  try { const min = await getMinOrd(it.day, it.row); await updateItem(it.id, { ord: min - 1 }); }
+                  catch (e) { showErr(e); }
                 }}
                 onMoveDown={async (it) => {
                   if (!canEdit) return;
-                  try {
-                    const max = await getMaxOrd(it.day, it.row);
-                    await updateItem(it.id, { ord: max + 1 }); // al final
-                  } catch (e: any) {
-                    showErr(e);
-                  }
+                  try { const max = await getMaxOrd(it.day, it.row); await updateItem(it.id, { ord: max + 1 }); }
+                  catch (e) { showErr(e); }
                 }}
                 onMoveLeft={async (it) => {
                   if (!canEdit) return;
                   try {
                     const idx = dayKeys.indexOf(it.day);
-                    const nx =
-                      ((idx - 1) % dayKeys.length + dayKeys.length) %
-                      dayKeys.length; // wrap
+                    const nx = ((idx - 1) % dayKeys.length + dayKeys.length) % dayKeys.length; // wrap
                     const max = await getMaxOrd(dayKeys[nx], it.row);
                     await updateItem(it.id, { day: dayKeys[nx], ord: max + 1 });
-                  } catch (e: any) {
-                    showErr(e);
-                  }
+                  } catch (e) { showErr(e); }
                 }}
                 onMoveRight={async (it) => {
                   if (!canEdit) return;
@@ -425,41 +397,32 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
                     const nx = (idx + 1) % dayKeys.length; // wrap
                     const max = await getMaxOrd(dayKeys[nx], it.row);
                     await updateItem(it.id, { day: dayKeys[nx], ord: max + 1 });
-                  } catch (e: any) {
-                    showErr(e);
-                  }
+                  } catch (e) { showErr(e); }
                 }}
                 onMoveRowUp={async (it) => {
                   if (!canEdit) return;
                   try {
                     const rIdx = ROWS.indexOf(it.row);
-                    if (rIdx <= 0) return; // sin wrap entre salas
+                    if (rIdx <= 0) return;
                     const destRow = ROWS[rIdx - 1] as RowKey;
                     const max = await getMaxOrd(it.day, destRow);
                     await updateItem(it.id, { row: destRow, ord: max + 1 });
-                  } catch (e: any) {
-                    showErr(e);
-                  }
+                  } catch (e) { showErr(e); }
                 }}
                 onMoveRowDown={async (it) => {
                   if (!canEdit) return;
                   try {
                     const rIdx = ROWS.indexOf(it.row);
-                    if (rIdx >= ROWS.length - 1) return; // sin wrap
+                    if (rIdx >= ROWS.length - 1) return;
                     const destRow = ROWS[rIdx + 1] as RowKey;
                     const max = await getMaxOrd(it.day, destRow);
                     await updateItem(it.id, { row: destRow, ord: max + 1 });
-                  } catch (e: any) {
-                    showErr(e);
-                  }
+                  } catch (e) { showErr(e); }
                 }}
                 onDelete={async (it) => {
                   if (!canEdit) return;
-                  try {
-                    if (confirm('Eliminar paciente?')) await deleteItem(it.id);
-                  } catch (e: any) {
-                    showErr(e);
-                  }
+                  try { if (confirm('Eliminar paciente?')) await deleteItem(it.id); }
+                  catch (e) { showErr(e); }
                 }}
               />
             ))}
@@ -470,6 +433,13 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
   );
 }
 
+/** CSV helper */
+function escapeCSV(s: string): string {
+  const needs = /[",\n]/.test(s);
+  const t = s.replace(/"/g, '""');
+  return needs ? `"${t}"` : t;
+}
+
 function RowBlock({
   row,
   dayKeys,
@@ -478,9 +448,13 @@ function RowBlock({
   search,
   draftCell,
   setDraftCell,
+  editId,
+  setEditId,
+  todayISO,
   onAdd,
   onSubmitAdd,
   onCancelAdd,
+  onSaveEdit,
   onMoveUp,
   onMoveDown,
   onMoveLeft,
@@ -496,9 +470,13 @@ function RowBlock({
   search: string;
   draftCell: { day: string; row: RowKey } | null;
   setDraftCell: (v: { day: string; row: RowKey } | null) => void;
+  editId: string | null;
+  setEditId: (id: string | null) => void;
+  todayISO: string;
   onAdd: (day: string) => void;
   onSubmitAdd: (day: string, vals: { name: string; room: string; dx: string; proc: ProcKey }) => void;
   onCancelAdd: () => void;
+  onSaveEdit: (it: Item, vals: { name: string; room: string; dx: string; proc: ProcKey }) => void;
   onMoveUp: (it: Item) => void;
   onMoveDown: (it: Item) => void;
   onMoveLeft: (it: Item) => void;
@@ -514,6 +492,7 @@ function RowBlock({
         {row}
       </div>
       {dayKeys.map((dk) => {
+        const isToday = dk === todayISO;
         const cell = items
           .filter((i) => i.day === dk && i.row === row)
           .sort((a, b) => a.ord - b.ord)
@@ -528,39 +507,47 @@ function RowBlock({
         const isDraftHere = draftCell?.day === dk && draftCell?.row === row;
 
         return (
-          <div
-            key={dk + row}
-            className="border-t border-r p-2 min-h-[140px] bg-white"
-          >
+          <div key={dk + row}
+               className={`border-t border-r p-2 min-h-[140px] ${isToday ? 'bg-red-50/40' : 'bg-white'}`}>
             <div className="flex flex-col gap-2">
-              {cell.map((it, idx) => (
-                <CardItem
-                  key={it.id}
-                  it={it}
-                  idx={idx}
-                  canEdit={canEdit}
-                  onMoveUp={() => onMoveUp(it)}
-                  onMoveDown={() => onMoveDown(it)}
-                  onMoveLeft={() => onMoveLeft(it)}
-                  onMoveRight={() => onMoveRight(it)}
-                  onMoveRowUp={() => onMoveRowUp(it)}
-                  onMoveRowDown={() => onMoveRowDown(it)}
-                  onDelete={() => onDelete(it)}
-                />
-              ))}
+              {cell.map((it, idx) =>
+                editId === it.id ? (
+                  <InlineEditorCard
+                    key={it.id}
+                    title="Editar paciente"
+                    initial={{ name: it.name, room: it.room, dx: it.dx, proc: it.proc }}
+                    onCancel={() => setEditId(null)}
+                    onSave={(vals) => onSaveEdit(it, vals)}
+                  />
+                ) : (
+                  <CardItem
+                    key={it.id}
+                    it={it}
+                    idx={idx}
+                    canEdit={canEdit}
+                    onEdit={() => setEditId(it.id)}
+                    onMoveUp={() => onMoveUp(it)}
+                    onMoveDown={() => onMoveDown(it)}
+                    onMoveLeft={() => onMoveLeft(it)}
+                    onMoveRight={() => onMoveRight(it)}
+                    onMoveRowUp={() => onMoveRowUp(it)}
+                    onMoveRowDown={() => onMoveRowDown(it)}
+                    onDelete={() => onDelete(it)}
+                  />
+                )
+              )}
 
               {canEdit && isDraftHere && (
                 <InlineEditorCard
+                  title="Nuevo paciente"
                   onCancel={onCancelAdd}
                   onSave={(vals) => onSubmitAdd(dk, vals)}
                 />
               )}
 
               {canEdit && !isDraftHere && (
-                <button
-                  className="px-2 py-1 border rounded text-sm bg-white w-fit"
-                  onClick={() => onAdd(dk)}
-                >
+                <button className="px-2 py-1 border rounded text-sm bg-white w-fit"
+                        onClick={() => onAdd(dk)}>
                   <Plus className="inline w-4 h-4 mr-1" /> Añadir paciente
                 </button>
               )}
@@ -576,6 +563,7 @@ function CardItem({
   it,
   idx,
   canEdit,
+  onEdit,
   onMoveUp,
   onMoveDown,
   onMoveLeft,
@@ -587,12 +575,13 @@ function CardItem({
   it: Item;
   idx: number;
   canEdit: boolean;
-  onMoveUp: () => void; // subir orden en celda
-  onMoveDown: () => void; // bajar orden en celda
-  onMoveLeft: () => void; // cambiar día -
-  onMoveRight: () => void; // cambiar día +
-  onMoveRowUp: () => void; // pasar a sala anterior
-  onMoveRowDown: () => void; // pasar a sala siguiente
+  onEdit: () => void;               // NUEVO botón editar
+  onMoveUp: () => void;             // subir orden en celda
+  onMoveDown: () => void;           // bajar orden en celda
+  onMoveLeft: () => void;           // cambiar día -
+  onMoveRight: () => void;          // cambiar día +
+  onMoveRowUp: () => void;          // pasar a sala anterior
+  onMoveRowDown: () => void;        // pasar a sala siguiente
   onDelete: () => void;
 }) {
   return (
@@ -608,77 +597,46 @@ function CardItem({
         </div>
         {canEdit && (
           <div className="flex items-center gap-1">
+            {/* Editar */}
+            <button className="p-1 rounded hover:bg-gray-100" onClick={onEdit} title="Editar">
+              <Pencil className="w-4 h-4" />
+            </button>
+
             {/* Día anterior / siguiente (wrap) */}
-            <button
-              className="p-1 rounded hover:bg-gray-100"
-              onClick={onMoveLeft}
-              title="Día anterior (wrap)"
-            >
+            <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveLeft} title="Día anterior (wrap)">
               <ArrowLeft className="w-4 h-4" />
             </button>
 
             {/* Orden dentro de la celda */}
-            <button
-              className="p-1 rounded hover:bg-gray-100"
-              onClick={onMoveUp}
-              title="Subir orden"
-            >
+            <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveUp} title="Subir orden">
               <ArrowUp className="w-4 h-4" />
             </button>
-            <button
-              className="p-1 rounded hover:bg-gray-100"
-              onClick={onMoveDown}
-              title="Bajar orden"
-            >
+            <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveDown} title="Bajar orden">
               <ArrowDown className="w-4 h-4" />
             </button>
 
             {/* Pasar a otra sala (misma fecha) */}
-            <button
-              className="p-1 rounded hover:bg-gray-100"
-              onClick={onMoveRowUp}
-              title="Pasar a sala anterior"
-            >
+            <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveRowUp} title="Pasar a sala anterior">
               <ChevronsUp className="w-4 h-4" />
             </button>
-            <button
-              className="p-1 rounded hover:bg-gray-100"
-              onClick={onMoveRowDown}
-              title="Pasar a sala siguiente"
-            >
+            <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveRowDown} title="Pasar a sala siguiente">
               <ChevronsDown className="w-4 h-4" />
             </button>
 
-            <button
-              className="p-1 rounded hover:bg-gray-100"
-              onClick={onMoveRight}
-              title="Día siguiente (wrap)"
-            >
+            <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveRight} title="Día siguiente (wrap)">
               <ArrowRight className="w-4 h-4" />
             </button>
 
-            <button
-              className="p-1 rounded hover:bg-gray-100"
-              onClick={onDelete}
-              title="Eliminar"
-            >
+            <button className="p-1 rounded hover:bg-gray-100" onClick={onDelete} title="Eliminar">
               <Trash2 className="w-4 h-4" />
             </button>
           </div>
         )}
       </div>
       <div className="flex flex-wrap gap-2 text-xs text-gray-600">
-        {it.room && (
-          <span className="px-2 py-0.5 rounded border bg-gray-50">
-            Hab: {it.room}
-          </span>
-        )}
-        {it.dx && (
-          <span className="px-2 py-0.5 rounded border bg-gray-50">
-            Dx: {it.dx}
-          </span>
-        )}
-        <span className="px-2 py-0.5 rounded border bg-gray-50">{it.proc}</span>
+        {it.room && <span className="px-2 py-0.5 rounded border bg-gray-50">Hab: {it.room}</span>}
+        {it.dx &&   <span className="px-2 py-0.5 rounded border bg-gray-50">Dx: {it.dx}</span>}
+        <span className={`px-2 py-0.5 rounded border ${procColor(it.proc)}`}>{it.proc}</span>
       </div>
     </div>
   );
