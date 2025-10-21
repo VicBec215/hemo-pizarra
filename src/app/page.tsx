@@ -188,6 +188,8 @@ export default function Page() {
 }
 
 function Header({ role }: { role: 'editor' | 'viewer' | 'unknown' }) {
+  const [showChange, setShowChange] = useState(false);
+
   return (
     <div className="mb-4 flex justify-between items-center">
       <div className="text-xl font-semibold">Agenda Hemodinámica — Pizarra semanal</div>
@@ -195,11 +197,26 @@ function Header({ role }: { role: 'editor' | 'viewer' | 'unknown' }) {
         <span className="text-sm px-2 py-1 border rounded-full bg-white">
           {role === 'editor' ? 'Editor' : role === 'viewer' ? 'Solo lectura' : 'No autenticado'}
         </span>
+
+        {/* Botón visible si está autenticado */}
+        {role !== 'unknown' && (
+          <button
+            className="px-3 py-1 rounded border bg-white text-sm"
+            onClick={() => setShowChange(true)}
+            title="Cambiar contraseña"
+          >
+            Cambiar contraseña
+          </button>
+        )}
+
         <AuthButtons />
       </div>
+
+      {showChange && <ChangePasswordDialog onClose={() => setShowChange(false)} />}
     </div>
   );
 }
+
 
 function AuthButtons() {
   const [email, setEmail] = useState('');
@@ -266,6 +283,115 @@ function AuthButtons() {
   );
 }
 
+function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
+  const [email, setEmail] = useState<string>('');
+  const [currentPwd, setCurrentPwd] = useState('');
+  const [newPwd, setNewPwd] = useState('');
+  const [confirmPwd, setConfirmPwd] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    // cargamos el email del usuario autenticado
+    supabase.auth.getUser().then(({ data }) => {
+      const e = data.user?.email ?? '';
+      setEmail(e);
+    });
+  }, []);
+
+  const onSave = async () => {
+    try {
+      if (!email) { alert('No se pudo leer tu email de sesión. Vuelve a iniciar sesión.'); return; }
+      if (!currentPwd || !newPwd) { alert('Completa las contraseñas.'); return; }
+      if (newPwd.length < 8) { alert('La nueva contraseña debe tener al menos 8 caracteres.'); return; }
+      if (newPwd !== confirmPwd) { alert('La confirmación no coincide.'); return; }
+
+      setBusy(true);
+
+      // 1) Verificamos la contraseña actual (para mayor seguridad)
+      const { error: loginErr } = await supabase.auth.signInWithPassword({ email, password: currentPwd });
+      if (loginErr) throw loginErr;
+
+      // 2) Cambiamos la contraseña
+      const { error } = await supabase.auth.updateUser({ password: newPwd });
+      if (error) throw error;
+
+      alert('Contraseña cambiada correctamente. Vuelve a entrar con la nueva.');
+      await supabase.auth.signOut();
+      onClose();
+    } catch (e) {
+      showErr(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+      <div className="bg-white rounded-xl border shadow-lg w-full max-w-md p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="font-semibold">Cambiar contraseña</div>
+          <button className="p-1 rounded hover:bg-gray-100" onClick={onClose} title="Cerrar">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-xs">
+            Email
+            <input
+              className="mt-1 w-full border rounded px-2 py-1 bg-gray-50"
+              value={email}
+              disabled
+            />
+          </label>
+
+          <label className="block text-xs">
+            Contraseña actual
+            <input
+              type="password"
+              className="mt-1 w-full border rounded px-2 py-1"
+              value={currentPwd}
+              onChange={(e) => setCurrentPwd(e.target.value)}
+              autoComplete="current-password"
+            />
+          </label>
+
+          <label className="block text-xs">
+            Nueva contraseña
+            <input
+              type="password"
+              className="mt-1 w-full border rounded px-2 py-1"
+              value={newPwd}
+              onChange={(e) => setNewPwd(e.target.value)}
+              autoComplete="new-password"
+            />
+          </label>
+
+          <label className="block text-xs">
+            Confirmar nueva contraseña
+            <input
+              type="password"
+              className="mt-1 w-full border rounded px-2 py-1"
+              value={confirmPwd}
+              onChange={(e) => setConfirmPwd(e.target.value)}
+              autoComplete="new-password"
+            />
+          </label>
+        </div>
+
+        <div className="mt-4 flex justify-end gap-2">
+          <button className="px-3 py-1 rounded border bg-white text-sm" onClick={onClose} disabled={busy}>
+            Cancelar
+          </button>
+          <button className="px-3 py-1 rounded border bg-white text-sm disabled:opacity-60"
+                  onClick={onSave} disabled={busy}>
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function AuthBlock() {
   return (
