@@ -225,29 +225,58 @@ function AuthButtons() {
 
   const doLoginPassword = async () => {
     try {
-      if (!email || !password) {
-        alert('Introduce email y contraseña');
-        return;
-      }
+      if (!email || !password) { alert('Introduce email y contraseña'); return; }
       setBusy(true);
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      // listo: el onAuthStateChange ya refresca la pantalla
+      // la UI se actualizará por onAuthStateChange
     } catch (e) {
-      // Mensajes típicos: "Invalid login credentials", "Email not confirmed"
       showErr(e);
     } finally {
       setBusy(false);
     }
   };
 
+// dentro de AuthButtons, añade:
+const sendReset = async () => {
+  try {
+    if (!email) { alert('Introduce tu email'); return; }
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    if (error) throw error;
+    alert('Te hemos enviado un correo para restablecer tu contraseña.');
+  } catch (e) {
+    // @ts-ignore
+    alert(e?.message || 'No se pudo enviar el correo');
+  }
+};
+
+// añade el botón:
+<button className="px-3 py-1 rounded border bg-white text-sm" onClick={sendReset}>
+  ¿Olvidaste la contraseña?
+</button>
+
+
   const doLogout = async () => {
-    try { setBusy(true); await supabase.auth.signOut(); }
-    catch (e) { showErr(e); }
-    finally { setBusy(false); }
+    try {
+      setBusy(true);
+      // 1) cerrar sesión actual (local basta)
+      const { error } = await supabase.auth.signOut(); // { scope: 'local' } opcional
+      if (error) throw error;
+
+      // 2) por si acaso, limpiamos caché mínima de UI
+      // (no borro todo localStorage por si tienes otros estados)
+      // 3) refrescamos la página para forzar rerender completo
+      window.location.replace('/'); // o window.location.reload();
+    } catch (e) {
+      showErr(e);
+    } finally {
+      setBusy(false);
+    }
   };
 
-  return (
+return (
     <div className="flex gap-2 items-center">
       <input
         className="border rounded px-2 py-1 text-sm"
@@ -276,6 +305,7 @@ function AuthButtons() {
         className="px-3 py-1 rounded border bg-white text-sm disabled:opacity-60"
         onClick={doLogout}
         disabled={busy}
+        title="Cerrar sesión"
       >
         Salir
       </button>
