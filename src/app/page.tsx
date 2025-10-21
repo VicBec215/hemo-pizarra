@@ -356,81 +356,62 @@ function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-      <div className="bg-white rounded-xl border shadow-lg w-full max-w-md p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="font-semibold">Cambiar contraseña</div>
-          <button className="p-1 rounded hover:bg-gray-100" onClick={onClose} title="Cerrar">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+  <div className="flex gap-2 items-center">
+    <input
+      className="border rounded px-2 py-1 text-sm"
+      placeholder="tu-email@hospital.es"
+      value={email}
+      onChange={(e) => setEmail(e.target.value)}
+      autoComplete="username"
+    />
+    <input
+      className="border rounded px-2 py-1 text-sm"
+      placeholder="Contraseña"
+      type="password"
+      value={password}
+      onChange={(e) => setPassword(e.target.value)}
+      autoComplete="current-password"
+    />
+    <button
+      className="px-3 py-1 rounded border bg-white text-sm disabled:opacity-60"
+      onClick={doLoginPassword}
+      disabled={busy}
+      title="Entrar con email y contraseña"
+    >
+      Entrar
+    </button>
 
-        <div className="space-y-2">
-          <label className="block text-xs">
-            Email
-            <input
-              className="mt-1 w-full border rounded px-2 py-1 bg-gray-50"
-              value={email}
-              disabled
-            />
-          </label>
+    {/* ⬇️ AÑADE ESTE BOTÓN DENTRO DEL RETURN */}
+    <button
+      className="px-3 py-1 rounded border bg-white text-sm"
+      onClick={sendReset}
+      title="Enviar correo para restablecer contraseña"
+    >
+      ¿Olvidaste la contraseña?
+    </button>
 
-          <label className="block text-xs">
-            Contraseña actual
-            <input
-              type="password"
-              className="mt-1 w-full border rounded px-2 py-1"
-              value={currentPwd}
-              onChange={(e) => setCurrentPwd(e.target.value)}
-              autoComplete="current-password"
-            />
-          </label>
-
-          <label className="block text-xs">
-            Nueva contraseña
-            <input
-              type="password"
-              className="mt-1 w-full border rounded px-2 py-1"
-              value={newPwd}
-              onChange={(e) => setNewPwd(e.target.value)}
-              autoComplete="new-password"
-            />
-          </label>
-
-          <label className="block text-xs">
-            Confirmar nueva contraseña
-            <input
-              type="password"
-              className="mt-1 w-full border rounded px-2 py-1"
-              value={confirmPwd}
-              onChange={(e) => setConfirmPwd(e.target.value)}
-              autoComplete="new-password"
-            />
-          </label>
-        </div>
-
-        <div className="mt-4 flex justify-end gap-2">
-          <button className="px-3 py-1 rounded border bg-white text-sm" onClick={onClose} disabled={busy}>
-            Cancelar
-          </button>
-          <button className="px-3 py-1 rounded border bg-white text-sm disabled:opacity-60"
-                  onClick={onSave} disabled={busy}>
-            Guardar
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+    <button
+      className="px-3 py-1 rounded border bg-white text-sm disabled:opacity-60"
+      onClick={doLogout}
+      disabled={busy}
+      title="Cerrar sesión"
+    >
+      Salir
+    </button>
+  </div>
+);
 
 function AuthBlock() {
   return (
     <div className="border rounded-lg bg-white p-6">
       <div className="mb-2 font-medium">Accede para ver la pizarra</div>
-      <div className="text-sm text-gray-600">Usa “Entrar por email”.</div>
+      <div className="text-sm text-gray-600">
+        Introduce tu email y contraseña en la parte superior. Si no recuerdas la contraseña, usa “¿Olvidaste la contraseña?”.
+      </div>
     </div>
   );
 }
+
 
 
 
