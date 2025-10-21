@@ -253,6 +253,8 @@ function AuthBlock() {
   );
 }
 
+
+
 function Board({ role }: { role: 'editor' | 'viewer' }) {
   const [weekStart, setWeekStart] = useState<Date>(() => startOfWeekMonday(new Date()));
   const [items, setItems] = useState<Item[]>([]);
@@ -316,6 +318,50 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
+
+  /** Mover una posición hacia arriba dentro de la misma celda (swap con anterior) */
+  const moveOneUp = async (it: Item) => {
+    // lista ordenada de la celda (mismo día y fila)
+    const cell = items
+      .filter(i => i.day === it.day && i.row === it.row)
+      .sort((a, b) => a.ord - b.ord);
+
+    const idx = cell.findIndex(i => i.id === it.id);
+    if (idx <= 0) return; // ya está el primero
+
+    const prev = cell[idx - 1];
+
+    // Intercambia los ord de 'it' y 'prev'
+    try {
+      await Promise.all([
+        updateItem(it.id,   { ord: prev.ord }),
+        updateItem(prev.id, { ord: it.ord  }),
+      ]);
+    } catch (e) {
+      showErr(e);
+    }
+  };
+
+  /** Mover una posición hacia abajo dentro de la misma celda (swap con siguiente) */
+  const moveOneDown = async (it: Item) => {
+    const cell = items
+      .filter(i => i.day === it.day && i.row === it.row)
+      .sort((a, b) => a.ord - b.ord);
+
+    const idx = cell.findIndex(i => i.id === it.id);
+    if (idx === -1 || idx >= cell.length - 1) return; // ya está el último
+
+    const next = cell[idx + 1];
+
+    try {
+      await Promise.all([
+        updateItem(it.id,   { ord: next.ord }),
+        updateItem(next.id, { ord: it.ord  }),
+      ]);
+    } catch (e) {
+      showErr(e);
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -399,15 +445,14 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
                   } catch (e) { showErr(e); }
                 }}
                 onMoveUp={async (it) => {
-                  if (!canEdit) return;
-                  try { const min = await getMinOrd(it.day, it.row); await updateItem(it.id, { ord: min - 1 }); }
-                  catch (e) { showErr(e); }
+                    if (!canEdit) return;
+                    await moveOneUp(it);
                 }}
                 onMoveDown={async (it) => {
-                  if (!canEdit) return;
-                  try { const max = await getMaxOrd(it.day, it.row); await updateItem(it.id, { ord: max + 1 }); }
-                  catch (e) { showErr(e); }
+                    if (!canEdit) return;
+                    await moveOneDown(it);
                 }}
+
                 onMoveLeft={async (it) => {
                   if (!canEdit) return;
                   try {
