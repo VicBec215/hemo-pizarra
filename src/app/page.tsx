@@ -229,7 +229,6 @@ function AuthButtons() {
       setBusy(true);
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      // la UI se actualizará por onAuthStateChange
     } catch (e) {
       showErr(e);
     } finally {
@@ -237,38 +236,25 @@ function AuthButtons() {
     }
   };
 
-// dentro de AuthButtons, añade:
-const sendReset = async () => {
-  try {
-    if (!email) { alert('Introduce tu email'); return; }
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-    if (error) throw error;
-    alert('Te hemos enviado un correo para restablecer tu contraseña.');
-  } catch (e) {
-    // @ts-ignore
-    alert(e?.message || 'No se pudo enviar el correo');
-  }
-};
-
-// añade el botón:
-<button className="px-3 py-1 rounded border bg-white text-sm" onClick={sendReset}>
-  ¿Olvidaste la contraseña?
-</button>
-
+  const sendReset = async () => {
+    try {
+      if (!email) { alert('Introduce tu email'); return; }
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+      alert('Te hemos enviado un correo para restablecer tu contraseña.');
+    } catch (e: any) {
+      alert(e?.message || 'No se pudo enviar el correo');
+    }
+  };
 
   const doLogout = async () => {
     try {
       setBusy(true);
-      // 1) cerrar sesión actual (local basta)
-      const { error } = await supabase.auth.signOut(); // { scope: 'local' } opcional
+      const { error } = await supabase.auth.signOut();
       if (error) throw error;
-
-      // 2) por si acaso, limpiamos caché mínima de UI
-      // (no borro todo localStorage por si tienes otros estados)
-      // 3) refrescamos la página para forzar rerender completo
-      window.location.replace('/'); // o window.location.reload();
+      window.location.replace('/');
     } catch (e) {
       showErr(e);
     } finally {
@@ -276,7 +262,7 @@ const sendReset = async () => {
     }
   };
 
-return (
+  return (
     <div className="flex gap-2 items-center">
       <input
         className="border rounded px-2 py-1 text-sm"
@@ -301,6 +287,16 @@ return (
       >
         Entrar
       </button>
+
+      {/* ⬇️ AQUÍ SÍ: el botón de reset DENTRO del return */}
+      <button
+        className="px-3 py-1 rounded border bg-white text-sm"
+        onClick={sendReset}
+        title="Enviar correo para restablecer contraseña"
+      >
+        ¿Olvidaste la contraseña?
+      </button>
+
       <button
         className="px-3 py-1 rounded border bg-white text-sm disabled:opacity-60"
         onClick={doLogout}
@@ -313,6 +309,7 @@ return (
   );
 }
 
+
 function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
   const [email, setEmail] = useState<string>('');
   const [currentPwd, setCurrentPwd] = useState('');
@@ -321,7 +318,6 @@ function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    // cargamos el email del usuario autenticado
     supabase.auth.getUser().then(({ data }) => {
       const e = data.user?.email ?? '';
       setEmail(e);
@@ -337,11 +333,9 @@ function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
 
       setBusy(true);
 
-      // 1) Verificamos la contraseña actual (para mayor seguridad)
       const { error: loginErr } = await supabase.auth.signInWithPassword({ email, password: currentPwd });
       if (loginErr) throw loginErr;
 
-      // 2) Cambiamos la contraseña
       const { error } = await supabase.auth.updateUser({ password: newPwd });
       if (error) throw error;
 
@@ -356,50 +350,76 @@ function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-  <div className="flex gap-2 items-center">
-    <input
-      className="border rounded px-2 py-1 text-sm"
-      placeholder="tu-email@hospital.es"
-      value={email}
-      onChange={(e) => setEmail(e.target.value)}
-      autoComplete="username"
-    />
-    <input
-      className="border rounded px-2 py-1 text-sm"
-      placeholder="Contraseña"
-      type="password"
-      value={password}
-      onChange={(e) => setPassword(e.target.value)}
-      autoComplete="current-password"
-    />
-    <button
-      className="px-3 py-1 rounded border bg-white text-sm disabled:opacity-60"
-      onClick={doLoginPassword}
-      disabled={busy}
-      title="Entrar con email y contraseña"
-    >
-      Entrar
-    </button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+      <div className="bg-white rounded-xl border shadow-lg w-full max-w-md p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="font-semibold">Cambiar contraseña</div>
+          <button className="p-1 rounded hover:bg-gray-100" onClick={onClose} title="Cerrar">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
 
-    {/* ⬇️ AÑADE ESTE BOTÓN DENTRO DEL RETURN */}
-    <button
-      className="px-3 py-1 rounded border bg-white text-sm"
-      onClick={sendReset}
-      title="Enviar correo para restablecer contraseña"
-    >
-      ¿Olvidaste la contraseña?
-    </button>
+        <div className="space-y-2">
+          <label className="block text-xs">
+            Email
+            <input
+              className="mt-1 w-full border rounded px-2 py-1 bg-gray-50"
+              value={email}
+              disabled
+            />
+          </label>
 
-    <button
-      className="px-3 py-1 rounded border bg-white text-sm disabled:opacity-60"
-      onClick={doLogout}
-      disabled={busy}
-      title="Cerrar sesión"
-    >
-      Salir
-    </button>
-  </div>
-);
+          <label className="block text-xs">
+            Contraseña actual
+            <input
+              type="password"
+              className="mt-1 w-full border rounded px-2 py-1"
+              value={currentPwd}
+              onChange={(e) => setCurrentPwd(e.target.value)}
+              autoComplete="current-password"
+            />
+          </label>
+
+          <label className="block text-xs">
+            Nueva contraseña
+            <input
+              type="password"
+              className="mt-1 w-full border rounded px-2 py-1"
+              value={newPwd}
+              onChange={(e) => setNewPwd(e.target.value)}
+              autoComplete="new-password"
+            />
+          </label>
+
+          <label className="block text-xs">
+            Confirmar nueva contraseña
+            <input
+              type="password"
+              className="mt-1 w-full border rounded px-2 py-1"
+              value={confirmPwd}
+              onChange={(e) => setConfirmPwd(e.target.value)}
+              autoComplete="new-password"
+            />
+          </label>
+        </div>
+
+        <div className="mt-4 flex justify-end gap-2">
+          <button className="px-3 py-1 rounded border bg-white text-sm" onClick={onClose} disabled={busy}>
+            Cancelar
+          </button>
+          <button
+            className="px-3 py-1 rounded border bg-white text-sm disabled:opacity-60"
+            onClick={onSave}
+            disabled={busy}
+          >
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function AuthBlock() {
   return (
