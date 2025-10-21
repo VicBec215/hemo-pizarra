@@ -320,8 +320,8 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
   }
 
   /** Mover una posición hacia arriba dentro de la misma celda (swap con anterior) */
+    /** Mover una posición hacia arriba (swap con anterior) */
   const moveOneUp = async (it: Item) => {
-    // lista ordenada de la celda (mismo día y fila)
     const cell = items
       .filter(i => i.day === it.day && i.row === it.row)
       .sort((a, b) => a.ord - b.ord);
@@ -331,33 +331,42 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
 
     const prev = cell[idx - 1];
 
-    // Intercambia los ord de 'it' y 'prev'
     try {
-      await Promise.all([
-        updateItem(it.id,   { ord: prev.ord }),
-        updateItem(prev.id, { ord: it.ord  }),
-      ]);
+      // 1) muevo 'it' a un ord temporal entre prev e it
+      const tempOrd = (prev.ord + it.ord) / 2;
+      await updateItem(it.id, { ord: tempOrd });
+
+      // 2) coloco 'prev' en el ord original de 'it'
+      await updateItem(prev.id, { ord: it.ord });
+
+      // 3) coloco 'it' en el ord original de 'prev'
+      await updateItem(it.id, { ord: prev.ord });
     } catch (e) {
       showErr(e);
     }
   };
 
-  /** Mover una posición hacia abajo dentro de la misma celda (swap con siguiente) */
+  /** Mover una posición hacia abajo (swap con siguiente) */
   const moveOneDown = async (it: Item) => {
     const cell = items
       .filter(i => i.day === it.day && i.row === it.row)
       .sort((a, b) => a.ord - b.ord);
 
     const idx = cell.findIndex(i => i.id === it.id);
-    if (idx === -1 || idx >= cell.length - 1) return; // ya está el último
+    if (idx === -1 || idx >= cell.length - 1) return; // ya es el último
 
     const next = cell[idx + 1];
 
     try {
-      await Promise.all([
-        updateItem(it.id,   { ord: next.ord }),
-        updateItem(next.id, { ord: it.ord  }),
-      ]);
+      // 1) muevo 'it' a ord temporal entre it y next
+      const tempOrd = (it.ord + next.ord) / 2;
+      await updateItem(it.id, { ord: tempOrd });
+
+      // 2) coloco 'next' en el ord original de 'it'
+      await updateItem(next.id, { ord: it.ord });
+
+      // 3) coloco 'it' en el ord original de 'next'
+      await updateItem(it.id, { ord: next.ord });
     } catch (e) {
       showErr(e);
     }

@@ -71,16 +71,22 @@ export async function addItem(partial: Omit<Item,'id'|'created_at'|'created_by'|
   return data as Item;
 }
 
-export async function updateItem(id: string, patch: Partial<Item>) {
+// src/lib/data.ts (solo la función updateItem)
+export async function updateItem(
+  id: string,
+  patch: Partial<Pick<Item, 'name' | 'room' | 'dx' | 'proc' | 'day' | 'row' | 'ord'>>
+) {
   const { data, error } = await supabase
     .from('items')
     .update(patch)
     .eq('id', id)
-    .select('*')
-    .single();
+    .select()
+    .maybeSingle(); // ⬅️ antes era .single()
+
   if (error) throw error;
-  return data as Item;
+  return data;
 }
+
 
 export async function deleteItem(id: string) {
   const { error } = await supabase.from('items').delete().eq('id', id);
