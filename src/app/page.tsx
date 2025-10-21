@@ -203,6 +203,32 @@ function Header({ role }: { role: 'editor' | 'viewer' | 'unknown' }) {
 
 function AuthButtons() {
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const doLoginPassword = async () => {
+    try {
+      if (!email || !password) {
+        alert('Introduce email y contraseña');
+        return;
+      }
+      setBusy(true);
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      // listo: el onAuthStateChange ya refresca la pantalla
+    } catch (e) {
+      // Mensajes típicos: "Invalid login credentials", "Email not confirmed"
+      showErr(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doLogout = async () => {
+    try { setBusy(true); await supabase.auth.signOut(); }
+    catch (e) { showErr(e); }
+    finally { setBusy(false); }
+  };
 
   return (
     <div className="flex gap-2 items-center">
@@ -211,31 +237,28 @@ function AuthButtons() {
         placeholder="tu-email@hospital.es"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
+        autoComplete="username"
+      />
+      <input
+        className="border rounded px-2 py-1 text-sm"
+        placeholder="Contraseña"
+        type="password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        autoComplete="current-password"
       />
       <button
-        className="px-3 py-1 rounded border bg-white text-sm"
-        onClick={async () => {
-          try {
-            if (!email) { alert('Introduce un email'); return; }
-            const { error } = await supabase.auth.signInWithOtp({
-              email,
-              options: { emailRedirectTo: window.location.origin },
-            });
-            if (error) throw error;
-            alert('Te hemos enviado un enlace de acceso. Revisa tu email.');
-          } catch (e) { showErr(e); }
-        }}
+        className="px-3 py-1 rounded border bg-white text-sm disabled:opacity-60"
+        onClick={doLoginPassword}
+        disabled={busy}
+        title="Entrar con email y contraseña"
       >
-        Entrar por email
+        Entrar
       </button>
-
-      {/* <-- NO HAY botón de Microsoft aquí */}
-
       <button
-        className="px-3 py-1 rounded border bg-white text-sm"
-        onClick={async () => {
-          try { await supabase.auth.signOut(); } catch (e) { showErr(e); }
-        }}
+        className="px-3 py-1 rounded border bg-white text-sm disabled:opacity-60"
+        onClick={doLogout}
+        disabled={busy}
       >
         Salir
       </button>
