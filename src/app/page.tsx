@@ -38,36 +38,28 @@ import {
 } from 'lucide-react';
 import { CheckCircle2, Circle } from 'lucide-react';
 
-/* =========================
-   Utilidades de sesión
-   ========================= */
+/* -------------------------- utilidades varias -------------------------- */
 
-/** Limpia cualquier rastro local de sesión de Supabase (claves sb-*) */
 function clearLocalAuth() {
   try {
-    Object.keys(localStorage)
-      .filter((k) => k.startsWith('sb-'))
-      .forEach((k) => localStorage.removeItem(k));
-    sessionStorage.clear?.();
-  } catch {}
+    // Supabase guarda claves que empiezan por 'sb-'
+    Object.keys(localStorage).forEach((k) => {
+      if (k.startsWith('sb-')) localStorage.removeItem(k);
+    });
+  } catch {
+    /* ignore */
+  }
 }
 
-/* =========================
-   Utilidades varias
-   ========================= */
-
-/** Colores de chips según procedimiento */
+/** Colores para el chip de procedimiento */
 function procColor(proc: ProcKey): string {
   const lower = proc.toLowerCase();
-  // Verde: Coronaria, C.Derecho
   if (lower === 'coronaria' || lower === 'c.derecho') {
     return 'bg-green-100 text-green-800 border-green-300';
   }
-  // Naranja: ICP
   if (lower === 'icp') {
     return 'bg-orange-100 text-orange-800 border-orange-300';
   }
-  // Rojo: Oclusión crónica (con y sin tildes)
   if (
     lower === 'oclusión crónica' ||
     lower === 'oclusion crónica' ||
@@ -77,11 +69,9 @@ function procColor(proc: ProcKey): string {
   ) {
     return 'bg-red-100 text-red-800 border-red-300';
   }
-  // Morado: TAVI, Mitraclip, Triclip, Orejuela, FOP, CIA
   if (['tavi', 'mitraclip', 'triclip', 'orejuela', 'fop', 'cia'].includes(lower)) {
     return 'bg-purple-100 text-purple-800 border-purple-300';
   }
-  // Neutro para "Otros"
   return 'bg-gray-200 text-gray-900 border-gray-300';
 }
 
@@ -105,9 +95,7 @@ function showErr(e: unknown) {
   }
 }
 
-/* =========================
-   Editor inline
-   ========================= */
+/* -------------------------- editor inline -------------------------- */
 
 function InlineEditorCard({
   title = 'Nuevo paciente',
@@ -120,14 +108,13 @@ function InlineEditorCard({
   onSave: (vals: { name: string; room: string; dx: string; proc: ProcKey }) => void;
   onCancel: () => void;
 }) {
-  // Inicializamos una sola vez
   const [name, setName] = useState(initial.name);
   const [room, setRoom] = useState(initial.room);
-  const [dx, setDx] = useState(initial.dx); // texto libre
+  const [dx, setDx] = useState(initial.dx);
   const [proc, setProc] = useState<ProcKey>(initial.proc);
 
   return (
-    <div className="bg-white rounded-xl border p-3 flex flex-col gap-3 shadow-sm w-full max-w-[560px]">
+    <div className="bg-white rounded-xl border p-3 flex flex-col gap-3 shadow-sm">
       {/* Barra superior: título + acciones */}
       <div className="flex items-center justify-between">
         <div className="text-sm font-semibold">{title}</div>
@@ -146,10 +133,10 @@ function InlineEditorCard({
       </div>
 
       {/* Nombre/ID grande a todo el ancho */}
-      <label className="text-xs block">
+      <label className="text-xs">
         Nombre/ID (evitar nombre completo)
         <input
-          className="mt-1 w-full border rounded px-3 py-2.5 text-lg leading-tight placeholder-gray-400"
+          className="mt-1 w-full border rounded px-3 py-2 text-base"
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Iniciales o ID"
@@ -174,7 +161,7 @@ function InlineEditorCard({
             className="mt-1 w-full border rounded px-2 py-1"
             value={dx}
             onChange={(e) => setDx(e.target.value)}
-            placeholder="p. ej., SCA…"
+            placeholder="p. ej., SCA..."
           />
         </label>
 
@@ -197,58 +184,66 @@ function InlineEditorCard({
   );
 }
 
-/* =========================
-   Página
-   ========================= */
+/* ------------------------------- página ------------------------------ */
 
 export default function Page() {
   const [sessionReady, setSessionReady] = useState(false);
   const [role, setRole] = useState<'editor' | 'viewer' | 'unknown'>('unknown');
 
-  // Inicialización + escuchar cambios de autenticación con recuperación si se atasca
+  // ▶️ Inicialización + escuchar cambios con *fallback* anti-atasco
   useEffect(() => {
     let stop = false;
+    let finished = false;
 
-    (async () => {
-      setSessionReady(false);
-
-      // Esperamos a que hidrate la sesión (máx ~3.6s)
-      let userId: string | null = null;
-      for (let i = 0; i < 24; i++) {
-        const { data } = await supabase.auth.getUser();
-        if (data?.user?.id) {
-          userId = data.user.id;
-          break;
-        }
-        await new Promise((r) => setTimeout(r, 150));
-      }
-      if (stop) return;
-
-      if (userId) {
-        setRole(await getMyRole());
-        setSessionReady(true);
-      } else {
-        // Sesión corrupta: limpiamos y quedamos como no autenticado
-        await supabase.auth.signOut({ scope: 'local' } as any);
-        clearLocalAuth();
+    const fallback = setTimeout(() => {
+      if (!finished && !stop) {
         setRole('unknown');
         setSessionReady(true);
+      }
+    }, 2500);
+
+    (async () => {
+      try {
+        setSessionReady(false);
+
+        // esperamos hasta 3s a que aparezca user
+        let userId: string | null = null;
+        for (let i = 0; i < 20; i++) {
+          const { data } = await supabase.auth.getUser();
+          if (data?.user?.id) {
+            userId = data.user.id;
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 150));
+        }
+        if (stop) return;
+
+        if (userId) {
+          const r = await getMyRole();
+          if (stop) return;
+          setRole(r);
+        } else {
+          await supabase.auth.signOut({ scope: 'local' } as any);
+          clearLocalAuth();
+          setRole('unknown');
+        }
+        setSessionReady(true);
+      } finally {
+        finished = true;
+        clearTimeout(fallback);
       }
     })();
 
     const { data: sub } = supabase.auth.onAuthStateChange(async () => {
       if (stop) return;
       const { data } = await supabase.auth.getUser();
-      if (data?.user) {
-        setRole(await getMyRole());
-      } else {
-        setRole('unknown');
-      }
+      setRole(data?.user ? await getMyRole() : 'unknown');
       setSessionReady(true);
     });
 
     return () => {
       stop = true;
+      clearTimeout(fallback);
       sub.subscription.unsubscribe();
     };
   }, []);
@@ -257,23 +252,18 @@ export default function Page() {
     <div className="p-4 max-w-[1200px] mx-auto">
       <Header role={role} />
       {role === 'unknown' ? <AuthBlock /> : <Board role={role} />}
-      {!sessionReady && (
-        <div className="mt-2 text-xs text-gray-500 select-none">Cargando sesión…</div>
-      )}
     </div>
   );
 }
 
-/* =========================
-   Cabecera + auth
-   ========================= */
+/* ------------------------------ cabecera ----------------------------- */
 
 function Header({ role }: { role: 'editor' | 'viewer' | 'unknown' }) {
   const [showChange, setShowChange] = useState(false);
 
   return (
     <div className="mb-4 flex justify-between items-center">
-      <div className="text-xl font-semibold">Agenda Hemodinámica — Pizarra semanal</div>
+      <div className="text-xl font-semibold">Agenda Hemodinámica — La Pizarra de Juan</div>
       <div className="flex gap-2 items-center">
         <span className="text-sm px-2 py-1 border rounded-full bg-white">
           {role === 'editor' ? 'Editor' : role === 'viewer' ? 'Solo lectura' : 'No autenticado'}
@@ -311,9 +301,7 @@ function AuthButtons() {
       setBusy(true);
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      // Refresca tokens por si acaso y evita estados atascados
-      await supabase.auth.refreshSession().catch(() => {});
-      // Redirige (fuerza rerender limpio)
+      // refresco completo para asegurar estado consistente
       window.location.replace('/');
     } catch (e) {
       showErr(e);
@@ -341,15 +329,13 @@ function AuthButtons() {
   const doLogout = async () => {
     try {
       setBusy(true);
-      // revoca tokens en servidor y limpia local
       await supabase.auth.signOut({ scope: 'global' } as any);
-      clearLocalAuth();
-      // Redirige a inicio para estado limpio
-      window.location.replace('/');
-    } catch (e) {
-      showErr(e);
+    } catch {
+      /* ignore */
     } finally {
+      clearLocalAuth();
       setBusy(false);
+      window.location.replace('/');
     }
   };
 
@@ -361,6 +347,7 @@ function AuthButtons() {
         value={email}
         onChange={(e) => setEmail(e.target.value)}
         autoComplete="username"
+        name="email"
       />
       <input
         className="border rounded px-2 py-1 text-sm"
@@ -369,6 +356,7 @@ function AuthButtons() {
         value={password}
         onChange={(e) => setPassword(e.target.value)}
         autoComplete="current-password"
+        name="password"
       />
       <button
         className="px-3 py-1 rounded border bg-white text-sm disabled:opacity-60"
@@ -387,10 +375,10 @@ function AuthButtons() {
         ¿Olvidaste la contraseña?
       </button>
 
+      {/* siempre clicable para no “quedarse muerto” visualmente */}
       <button
-        className="px-3 py-1 rounded border bg-white text-sm disabled:opacity-60"
+        className="px-3 py-1 rounded border bg-white text-sm"
         onClick={doLogout}
-        disabled={busy}
         title="Cerrar sesión"
       >
         Salir
@@ -445,9 +433,7 @@ function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
 
       alert('Contraseña cambiada correctamente. Vuelve a entrar con la nueva.');
       await supabase.auth.signOut();
-      clearLocalAuth();
       onClose();
-      window.location.replace('/');
     } catch (e) {
       showErr(e);
     } finally {
@@ -468,11 +454,7 @@ function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
         <div className="space-y-2">
           <label className="block text-xs">
             Email
-            <input
-              className="mt-1 w-full border rounded px-2 py-1 bg-gray-50"
-              value={email}
-              disabled
-            />
+            <input className="mt-1 w-full border rounded px-2 py-1 bg-gray-50" value={email} disabled />
           </label>
 
           <label className="block text-xs">
@@ -513,11 +495,7 @@ function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
           <button className="px-3 py-1 rounded border bg-white text-sm" onClick={onClose} disabled={busy}>
             Cancelar
           </button>
-          <button
-            className="px-3 py-1 rounded border bg-white text-sm disabled:opacity-60"
-            onClick={onSave}
-            disabled={busy}
-          >
+          <button className="px-3 py-1 rounded border bg-white text-sm disabled:opacity-60" onClick={onSave} disabled={busy}>
             Guardar
           </button>
         </div>
@@ -537,18 +515,14 @@ function AuthBlock() {
   );
 }
 
-/* =========================
-   Tablero
-   ========================= */
+/* ------------------------------- tablero ------------------------------ */
 
 function Board({ role }: { role: 'editor' | 'viewer' }) {
   const [weekStart, setWeekStart] = useState<Date>(() => startOfWeekMonday(new Date()));
   const [items, setItems] = useState<Item[]>([]);
   const [search, setSearch] = useState('');
 
-  // alta inline: {day,row} de la celda que está editando (nuevo)
   const [draftCell, setDraftCell] = useState<{ day: string; row: RowKey } | null>(null);
-  // edición inline de un item existente
   const [editId, setEditId] = useState<string | null>(null);
 
   const days = useMemo(() => Array.from({ length: 5 }, (_, i) => addDays(weekStart, i)), [weekStart]);
@@ -570,12 +544,10 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
 
   const canEdit = role === 'editor';
 
-  // Anchos para scroll horizontal cómodo
-  const DAY_COL_WIDTH = 320; // px
-  const FIRST_COL_WIDTH = 160; // px
+  const DAY_COL_WIDTH = 320;
+  const FIRST_COL_WIDTH = 160;
   const minWidth = FIRST_COL_WIDTH + 5 * DAY_COL_WIDTH;
 
-  /** Exportar CSV de la semana visible */
   function exportCSV() {
     const rows: string[] = [];
     const header = ['Día', 'Sala/Turno', 'Orden', 'Nombre/ID', 'Habitación', 'Diagnóstico', 'Procedimiento', 'Finalizado'];
@@ -613,12 +585,9 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
     URL.revokeObjectURL(url);
   }
 
-  /** Mover una posición hacia arriba (swap con anterior) usando parking INTEGER */
+  /** Mover una posición hacia arriba (swap) usando parking INTEGER */
   const moveOneUp = async (it: Item) => {
-    const cell = items
-      .filter((i) => i.day === it.day && i.row === it.row)
-      .sort((a, b) => a.ord - b.ord);
-
+    const cell = items.filter((i) => i.day === it.day && i.row === it.row).sort((a, b) => a.ord - b.ord);
     const idx = cell.findIndex((i) => i.id === it.id);
     if (idx <= 0) return;
 
@@ -638,12 +607,9 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
     }
   };
 
-  /** Mover una posición hacia abajo (swap con siguiente) usando parking INTEGER */
+  /** Mover una posición hacia abajo (swap) usando parking INTEGER */
   const moveOneDown = async (it: Item) => {
-    const cell = items
-      .filter((i) => i.day === it.day && i.row === it.row)
-      .sort((a, b) => a.ord - b.ord);
-
+    const cell = items.filter((i) => i.day === it.day && i.row === it.row).sort((a, b) => a.ord - b.ord);
     const idx = cell.findIndex((i) => i.id === it.id);
     if (idx === -1 || idx >= cell.length - 1) return;
 
@@ -666,22 +632,13 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <button
-          className="px-2 py-1 border rounded bg-white"
-          onClick={() => setWeekStart(addDays(weekStart, -7))}
-        >
+        <button className="px-2 py-1 border rounded bg-white" onClick={() => setWeekStart(addDays(weekStart, -7))}>
           <ArrowLeft className="inline w-4 h-4" /> Semana anterior
         </button>
-        <button
-          className="px-2 py-1 border rounded bg-white"
-          onClick={() => setWeekStart(startOfWeekMonday(new Date()))}
-        >
+        <button className="px-2 py-1 border rounded bg-white" onClick={() => setWeekStart(startOfWeekMonday(new Date()))}>
           <Calendar className="inline w-4 h-4" /> Esta semana
         </button>
-        <button
-          className="px-2 py-1 border rounded bg-white"
-          onClick={() => setWeekStart(addDays(weekStart, 7))}
-        >
+        <button className="px-2 py-1 border rounded bg-white" onClick={() => setWeekStart(addDays(weekStart, 7))}>
           Siguiente semana <ArrowRight className="inline w-4 h-4" />
         </button>
 
@@ -692,34 +649,22 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
           onChange={(e) => setSearch(e.target.value)}
         />
 
-        <button
-          className="px-2 py-1 border rounded bg-white flex items-center gap-1"
-          onClick={exportCSV}
-          title="Exportar semana en CSV"
-        >
+        <button className="px-2 py-1 border rounded bg-white flex items-center gap-1" onClick={exportCSV} title="Exportar semana en CSV">
           <Download className="w-4 h-4" /> Exportar CSV
         </button>
       </div>
 
-      {/* Contenedor con scroll horizontal */}
       <div className="border rounded-lg overflow-x-auto touch-pan-x">
         <div style={{ minWidth }}>
-          <div
-            className="grid"
-            style={{ gridTemplateColumns: `${FIRST_COL_WIDTH}px repeat(5, ${DAY_COL_WIDTH}px)` }}
-          >
+          <div className="grid" style={{ gridTemplateColumns: `${FIRST_COL_WIDTH}px repeat(5, ${DAY_COL_WIDTH}px)` }}>
             {/* Cabecera */}
-            <div className="bg-gray-100 border-b px-3 py-2 font-medium sticky top-0 left-0 z-20">
-              Sala/Turno
-            </div>
+            <div className="bg-gray-100 border-b px-3 py-2 font-medium sticky top-0 left-0 z-20">Sala/Turno</div>
             {days.map((d, i) => {
               const isToday = toISODate(d) === todayISO;
               return (
                 <div
                   key={i}
-                  className={`border-b px-3 py-2 font-medium sticky top-0 z-10 ${
-                    isToday ? 'bg-red-50 text-red-700' : 'bg-gray-100'
-                  }`}
+                  className={`border-b px-3 py-2 font-medium sticky top-0 z-10 ${isToday ? 'bg-red-50 text-red-700' : 'bg-gray-100'}`}
                 >
                   {d.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: '2-digit' })}
                 </div>
@@ -853,16 +798,15 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
   );
 }
 
-/** CSV helper */
+/* ------------------------------- helpers ------------------------------ */
+
 function escapeCSV(s: string): string {
   const needs = /[",\n]/.test(s);
   const t = s.replace(/"/g, '""');
   return needs ? `"${t}"` : t;
 }
 
-/* =========================
-   Celdas + tarjetas
-   ========================= */
+/* ------------------------------ subcomponentes ------------------------------ */
 
 function RowBlock({
   row,
@@ -913,37 +857,27 @@ function RowBlock({
 }) {
   return (
     <>
-      {/* Primera columna (etiqueta de fila) */}
-      <div className="bg-gray-100 border-r px-3 py-3 font-semibold sticky left-0 z-10">
-        {row}
-      </div>
+      <div className="bg-gray-100 border-r px-3 py-3 font-semibold sticky left-0 z-10">{row}</div>
       {dayKeys.map((dk) => {
         const isToday = dk === todayISO;
         const cell = items
           .filter((i) => i.day === dk && i.row === row)
           .sort((a, b) => a.ord - b.ord)
           .filter((i) =>
-            !search
-              ? true
-              : [i.name, i.room, i.dx, i.proc].some((f) =>
-                  String(f).toLowerCase().includes(search.toLowerCase())
-                )
+            !search ? true : [i.name, i.room, i.dx, i.proc].some((f) => String(f).toLowerCase().includes(search.toLowerCase())),
           );
 
         const isDraftHere = draftCell?.day === dk && draftCell?.row === row;
 
         return (
-          <div
-            key={dk + row}
-            className={`border-t border-r p-2 min-h-[140px] ${isToday ? 'bg-red-50/40' : 'bg-white'}`}
-          >
+          <div key={dk + row} className={`border-t border-r p-2 min-h-[140px] ${isToday ? 'bg-red-50/40' : 'bg-white'}`}>
             <div className="flex flex-col gap-2">
               {cell.map((it, idx) =>
                 editId === it.id ? (
                   <InlineEditorCard
                     key={it.id}
                     title="Editar paciente"
-                    initial={{ name: it.name || '', room: it.room || '', dx: it.dx || '', proc: (it.proc as ProcKey) }}
+                    initial={{ name: it.name || '', room: it.room || '', dx: it.dx || '', proc: it.proc as ProcKey }}
                     onCancel={() => setEditId(null)}
                     onSave={(vals) => onSaveEdit(it, vals)}
                   />
@@ -963,22 +897,15 @@ function RowBlock({
                     onDelete={() => onDelete(it)}
                     onToggleDone={() => onToggleDone(it)}
                   />
-                )
+                ),
               )}
 
               {canEdit && isDraftHere && (
-                <InlineEditorCard
-                  title="Nuevo paciente"
-                  onCancel={onCancelAdd}
-                  onSave={(vals) => onSubmitAdd(dk, vals)}
-                />
+                <InlineEditorCard title="Nuevo paciente" onCancel={onCancelAdd} onSave={(vals) => onSubmitAdd(dk, vals)} />
               )}
 
               {canEdit && !isDraftHere && (
-                <button
-                  className="px-2 py-1 border rounded text-sm bg-white w-fit"
-                  onClick={() => onAdd(dk)}
-                >
+                <button className="px-2 py-1 border rounded text-sm bg-white w-fit" onClick={() => onAdd(dk)}>
                   <Plus className="inline w-4 h-4 mr-1" /> Añadir paciente
                 </button>
               )}
@@ -1026,16 +953,12 @@ function CardItem({
       {/* Línea superior con orden, nombre y controles */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
-          <div className="w-6 h-6 rounded-full border flex items-center justify-center text-xs font-medium">
-            {idx + 1}
-          </div>
+          <div className="w-6 h-6 rounded-full border flex items-center justify-center text-xs font-medium">{idx + 1}</div>
           <div className="text-sm font-semibold truncate" title={it.name ?? ''}>
             {it.name || '(sin nombre)'}
           </div>
           {it.done && (
-            <span className="ml-2 px-2 py-0.5 rounded-full text-[11px] border bg-gray-200">
-              Finalizado
-            </span>
+            <span className="ml-2 px-2 py-0.5 rounded-full text-[11px] border bg-gray-200">Finalizado</span>
           )}
         </div>
 
