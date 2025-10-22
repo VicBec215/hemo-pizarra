@@ -261,45 +261,65 @@ function AuthButtons() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // Refs para leer del DOM si Chrome autocompleta sin disparar onChange
+  const emailRef = useRef<HTMLInputElement | null>(null);
+  const passRef  = useRef<HTMLInputElement | null>(null);
+
+  // Al montar, intenta capturar valores que Chrome haya autocompletado
+  useEffect(() => {
+    const sync = () => {
+      const e = emailRef.current?.value ?? '';
+      const p = passRef.current?.value ?? '';
+      if (e && !email) setEmail(e);
+      if (p && !password) setPassword(p);
+    };
+    // un pequeño retraso suele ayudar con el autofill de Chrome
+    const t = setTimeout(sync, 300);
+    return () => clearTimeout(t);
+  }, []); // una sola vez
+
   const doLoginPassword = async () => {
-  try {
-    if (!email || !password) {
-      alert('Introduce email y contraseña');
-      return;
+    try {
+      // lee del estado y, si está vacío, cae al valor del input (refs)
+      const e = (email || emailRef.current?.value || '').trim();
+      const p = (password || passRef.current?.value || '').trim();
+
+      if (!e || !p) {
+        alert('Introduce email y contraseña');
+        return;
+      }
+      setBusy(true);
+
+      console.log('[LOGIN] trying signInWithPassword', e);
+      const { data, error } = await supabase.auth.signInWithPassword({ email: e, password: p });
+      console.log('[LOGIN] result', { error, user: data?.user });
+      if (error) throw error;
+
+      // Espera breve para que el SDK persista la sesión
+      await new Promise((r) => setTimeout(r, 150));
+
+      const { data: u2 } = await supabase.auth.getUser();
+      console.log('[LOGIN] getUser after login', u2?.user?.id ? 'OK:' + u2.user.id : 'NO USER');
+      if (!u2?.user) {
+        alert('No se pudo obtener sesión tras el login. Prueba de nuevo.');
+        return;
+      }
+
+      console.log('[LOGIN] reload now');
+      window.location.replace('/');
+    } catch (e) {
+      console.error('[LOGIN] error', e);
+      showErr(e);
+    } finally {
+      setBusy(false);
     }
-    setBusy(true);
-
-    // 1) Login
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-
-    // 2) Pequeña espera para que el SDK persista la sesión en localStorage
-    await new Promise((r) => setTimeout(r, 150));
-
-    // 3) Verificamos que ya hay usuario
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData?.user) {
-      throw new Error('No se pudo obtener sesión tras el login. Prueba de nuevo.');
-    }
-
-    // 4) Recarga completa
-    window.location.replace('/'); // o window.location.reload();
-  } catch (e) {
-    showErr(e);
-  } finally {
-    setBusy(false);
-  }
-};
-
-
+  };
 
   const sendReset = async () => {
     try {
-      if (!email) {
-        alert('Introduce tu email');
-        return;
-      }
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      const e = (email || emailRef.current?.value || '').trim();
+      if (!e) { alert('Introduce tu email'); return; }
+      const { error } = await supabase.auth.resetPasswordForEmail(e, {
         redirectTo: `${window.location.origin}/reset-password`,
       });
       if (error) throw error;
@@ -325,18 +345,26 @@ function AuthButtons() {
   return (
     <div className="flex gap-2 items-center">
       <input
+        id="login-email"
+        name="email"
+        ref={emailRef}
         className="border rounded px-2 py-1 text-sm"
         placeholder="tu-email@hospital.es"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        autoComplete="username"
+        onInput={(e) => setEmail((e.target as HTMLInputElement).value)} // por si el autofill dispara onInput
+        autoComplete="email" /* más fiable para Chrome */
       />
       <input
+        id="login-password"
+        name="password"
+        ref={passRef}
         className="border rounded px-2 py-1 text-sm"
         placeholder="Contraseña"
         type="password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
+        onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
         autoComplete="current-password"
       />
       <button
