@@ -224,17 +224,19 @@ function AuthButtons() {
   const [busy, setBusy] = useState(false);
 
   const doLoginPassword = async () => {
-    try {
-      if (!email || !password) { alert('Introduce email y contraseña'); return; }
-      setBusy(true);
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-    } catch (e) {
-      showErr(e);
-    } finally {
-      setBusy(false);
-    }
-  };
+  try {
+    if (!email || !password) { alert('Introduce email y contraseña'); return; }
+    setBusy(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    // ✅ fuerza re-render completo (evita estados “atascados”)
+    window.location.replace('/'); // o window.location.reload();
+  } catch (e) {
+    showErr(e);
+  } finally {
+    setBusy(false);
+  }
+};
 
   const sendReset = async () => {
     try {
