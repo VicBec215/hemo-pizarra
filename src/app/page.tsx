@@ -1,6 +1,4 @@
-// ❌ NO pongas "use client" aquí: este archivo debe ser de servidor
-
-// Forzamos que esta ruta NO se prerrenderice ni se cachee
+// src/app/page.tsx  (⚠️ archivo de servidor)
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'force-no-store';
