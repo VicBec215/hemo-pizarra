@@ -20,7 +20,6 @@ import {
   getMyRole,
   Item,
   getMaxOrd,
-  getMinOrd,
 } from '@/lib/data';
 import {
   ArrowLeft,
@@ -39,27 +38,36 @@ import {
 } from 'lucide-react';
 import { CheckCircle2, Circle } from 'lucide-react';
 
-
 /** Util: clases para badges de procedimiento */
 function procColor(proc: ProcKey): string {
   const lower = proc.toLowerCase();
   // Verde: Coronaria, C.Derecho
-  if (lower === 'coronaria' || lower === 'c.derecho') return 'bg-green-100 text-green-800 border-green-300';
+  if (lower === 'coronaria' || lower === 'c.derecho') {
+    return 'bg-green-100 text-green-800 border-green-300';
+  }
   // Naranja: ICP
-  if (lower === 'icp') return 'bg-orange-100 text-orange-800 border-orange-300';
-  // Rojo: Oclusión crónica
-  if (lower === 'oclusión crónica' || lower === 'oclusion crónica' || lower === 'oclusión cronica' || lower === 'oclusion cronica') {
+  if (lower === 'icp') {
+    return 'bg-orange-100 text-orange-800 border-orange-300';
+  }
+  // Rojo: Oclusión crónica (con y sin tildes)
+  if (
+    lower === 'oclusión crónica' ||
+    lower === 'oclusion crónica' ||
+    lower === 'oclusión cronica' ||
+    lower === 'oclusion cronica' ||
+    lower === 'oclusión crónica.'
+  ) {
     return 'bg-red-100 text-red-800 border-red-300';
   }
   // Morado: TAVI, Mitraclip, Triclip, Orejuela, FOP, CIA
-  if (['tavi','mitraclip','triclip','orejuela','fop','cia'].includes(lower)) {
+  if (['tavi', 'mitraclip', 'triclip', 'orejuela', 'fop', 'cia'].includes(lower)) {
     return 'bg-purple-100 text-purple-800 border-purple-300';
   }
-  // Negro (neutro oscuro): Otros (usamos gris oscuro para buena legibilidad)
+  // Neutro para "Otros"
   return 'bg-gray-200 text-gray-900 border-gray-300';
 }
 
-/** Errores legibles (sin 'any') */
+/** Errores legibles */
 function showErr(e: unknown) {
   try {
     const obj = e as Record<string, unknown>;
@@ -99,6 +107,7 @@ function InlineEditorCard({
 
   return (
     <div className="bg-white rounded-xl border p-3 flex flex-col gap-3 shadow-sm">
+      {/* Barra superior: título + acciones */}
       <div className="flex items-center justify-between">
         <div className="text-sm font-semibold">{title}</div>
         <div className="flex items-center gap-1">
@@ -115,71 +124,86 @@ function InlineEditorCard({
         </div>
       </div>
 
+      {/* Nombre/ID grande a todo el ancho */}
+      <label className="text-xs">
+        Nombre/ID (evitar nombre completo)
+        <input
+          className="mt-1 w-full border rounded px-3 py-2 text-base"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Iniciales o ID"
+        />
+      </label>
+
+      {/* Resto en dos columnas */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-        // Encabezado tal como lo tienes…
+        <label className="text-xs">
+          Habitación
+          <input
+            className="mt-1 w-full border rounded px-2 py-1"
+            value={room}
+            onChange={(e) => setRoom(e.target.value)}
+            placeholder="312B"
+          />
+        </label>
 
-{/* Bloque de nombre a TODO el ancho y con fuente mayor */}
-<label className="text-xs">
-  Nombre/ID (evitar nombre completo)
-  <input
-    className="mt-1 w-full border rounded px-3 py-2 text-base"   // ⬅️ más ancho y grande
-    value={name}
-    onChange={(e) => setName(e.target.value)}
-    placeholder="Iniciales o ID"
-  />
-</label>
+        <label className="text-xs">
+          Diagnóstico (texto libre)
+          <input
+            className="mt-1 w-full border rounded px-2 py-1"
+            value={dx}
+            onChange={(e) => setDx(e.target.value)}
+            placeholder="p. ej., SCA..."
+          />
+        </label>
 
-{/* El resto en dos columnas */}
-<div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-  <label className="text-xs">
-    Habitación
-    <input
-      className="mt-1 w-full border rounded px-2 py-1"
-      value={room}
-      onChange={(e) => setRoom(e.target.value)}
-      placeholder="312B"
-    />
-  </label>
-
-  <label className="text-xs">
-    Diagnóstico (texto libre)
-    <input
-      className="mt-1 w-full border rounded px-2 py-1"
-      value={dx}
-      onChange={(e) => setDx(e.target.value)}
-      placeholder="p. ej., SCA..."
-    />
-  </label>
-
-  <label className="text-xs">
-    Procedimiento
-    <select
-      className="mt-1 w-full border rounded px-2 py-1 bg-white"
-      value={proc}
-      onChange={(e) => setProc(e.target.value as ProcKey)}
-    >
-      {PROCS.map((o) => (
-        <option key={o} value={o}>{o}</option>
-      ))}
-    </select>
-  </label>
-</div>
-
+        <label className="text-xs">
+          Procedimiento
+          <select
+            className="mt-1 w-full border rounded px-2 py-1 bg-white"
+            value={proc}
+            onChange={(e) => setProc(e.target.value as ProcKey)}
+          >
+            {PROCS.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+    </div>
+  );
+}
 
 export default function Page() {
   const [sessionReady, setSessionReady] = useState(false);
   const [role, setRole] = useState<'editor' | 'viewer' | 'unknown'>('unknown');
 
+  // ▶️ Inicialización + escuchar cambios de autenticación
   useEffect(() => {
-    supabase.auth.getSession().then(() => setSessionReady(true));
-    const { data: sub } = supabase.auth.onAuthStateChange(() => setSessionReady(true));
-    return () => { sub.subscription.unsubscribe(); };
-  }, []);
+    let cancelled = false;
 
-  useEffect(() => {
-    if (!sessionReady) return;
-    (async () => setRole(await getMyRole()))();
-  }, [sessionReady]);
+    const load = async () => {
+      await supabase.auth.getSession();
+      if (!cancelled) setSessionReady(true);
+      // recalcular rol al montar
+      const r = await getMyRole();
+      if (!cancelled) setRole(r);
+    };
+    load();
+
+    const { data: sub } = supabase.auth.onAuthStateChange(async () => {
+      if (!cancelled) setSessionReady(true);
+      const r = await getMyRole();
+      if (!cancelled) setRole(r);
+    });
+
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
 
   return (
     <div className="p-4 max-w-[1200px] mx-auto">
@@ -219,30 +243,35 @@ function Header({ role }: { role: 'editor' | 'viewer' | 'unknown' }) {
   );
 }
 
-
 function AuthButtons() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
 
   const doLoginPassword = async () => {
-  try {
-    if (!email || !password) { alert('Introduce email y contraseña'); return; }
-    setBusy(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    // ✅ fuerza re-render completo (evita estados “atascados”)
-    window.location.replace('/'); // o window.location.reload();
-  } catch (e) {
-    showErr(e);
-  } finally {
-    setBusy(false);
-  }
-};
+    try {
+      if (!email || !password) {
+        alert('Introduce email y contraseña');
+        return;
+      }
+      setBusy(true);
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      // Refresco completo para asegurar estado consistente
+      window.location.replace('/');
+    } catch (e) {
+      showErr(e);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const sendReset = async () => {
     try {
-      if (!email) { alert('Introduce tu email'); return; }
+      if (!email) {
+        alert('Introduce tu email');
+        return;
+      }
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
       });
@@ -292,7 +321,6 @@ function AuthButtons() {
         Entrar
       </button>
 
-      {/* ⬇️ AQUÍ SÍ: el botón de reset DENTRO del return */}
       <button
         className="px-3 py-1 rounded border bg-white text-sm"
         onClick={sendReset}
@@ -313,7 +341,6 @@ function AuthButtons() {
   );
 }
 
-
 function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
   const [email, setEmail] = useState<string>('');
   const [currentPwd, setCurrentPwd] = useState('');
@@ -330,14 +357,29 @@ function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
 
   const onSave = async () => {
     try {
-      if (!email) { alert('No se pudo leer tu email de sesión. Vuelve a iniciar sesión.'); return; }
-      if (!currentPwd || !newPwd) { alert('Completa las contraseñas.'); return; }
-      if (newPwd.length < 8) { alert('La nueva contraseña debe tener al menos 8 caracteres.'); return; }
-      if (newPwd !== confirmPwd) { alert('La confirmación no coincide.'); return; }
+      if (!email) {
+        alert('No se pudo leer tu email de sesión. Vuelve a iniciar sesión.');
+        return;
+      }
+      if (!currentPwd || !newPwd) {
+        alert('Completa las contraseñas.');
+        return;
+      }
+      if (newPwd.length < 8) {
+        alert('La nueva contraseña debe tener al menos 8 caracteres.');
+        return;
+      }
+      if (newPwd !== confirmPwd) {
+        alert('La confirmación no coincide.');
+        return;
+      }
 
       setBusy(true);
 
-      const { error: loginErr } = await supabase.auth.signInWithPassword({ email, password: currentPwd });
+      const { error: loginErr } = await supabase.auth.signInWithPassword({
+        email,
+        password: currentPwd,
+      });
       if (loginErr) throw loginErr;
 
       const { error } = await supabase.auth.updateUser({ password: newPwd });
@@ -424,7 +466,6 @@ function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-
 function AuthBlock() {
   return (
     <div className="border rounded-lg bg-white p-6">
@@ -435,9 +476,6 @@ function AuthBlock() {
     </div>
   );
 }
-
-
-
 
 function Board({ role }: { role: 'editor' | 'viewer' }) {
   const [weekStart, setWeekStart] = useState<Date>(() => startOfWeekMonday(new Date()));
@@ -457,8 +495,14 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
     setItems(await listWeek(toISODate(weekStart)));
   }, [weekStart]);
 
-  useEffect(() => { reload(); }, [reload]);
-  useEffect(() => { const unsub = subscribeItems(reload); return () => unsub(); }, [reload]);
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  useEffect(() => {
+    const unsub = subscribeItems(reload);
+    return () => unsub();
+  }, [reload]);
 
   const canEdit = role === 'editor';
 
@@ -496,100 +540,115 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
       }
     }
 
-    const blob = new Blob(["\uFEFF" + rows.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob(['\uFEFF' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `pizarra_${dayKeys[0]}_a_${dayKeys[4]}.csv`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    a.href = url;
+    a.download = `pizarra_${dayKeys[0]}_a_${dayKeys[4]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
 
-  /** Mover una posición hacia arriba dentro de la misma celda (swap con anterior) */
-    /** Mover una posición hacia arriba (swap con anterior) */
   /** Mover una posición hacia arriba (swap con anterior) usando parking INTEGER */
-const moveOneUp = async (it: Item) => {
-  const cell = items
-    .filter(i => i.day === it.day && i.row === it.row)
-    .sort((a, b) => a.ord - b.ord);
+  const moveOneUp = async (it: Item) => {
+    const cell = items
+      .filter((i) => i.day === it.day && i.row === it.row)
+      .sort((a, b) => a.ord - b.ord);
 
-  const idx = cell.findIndex(i => i.id === it.id);
-  if (idx <= 0) return; // ya es el primero
+    const idx = cell.findIndex((i) => i.id === it.id);
+    if (idx <= 0) return; // ya es el primero
 
-  const prev = cell[idx - 1];
-  const oldItOrd = it.ord;
-  const oldPrevOrd = prev.ord;
+    const prev = cell[idx - 1];
+    const oldItOrd = it.ord;
+    const oldPrevOrd = prev.ord;
 
-  // valor de parking: más pequeño que cualquiera en la celda
-  const minOrd = cell[0]?.ord ?? 0;
-  const PARK = minOrd - 100000; // entero
+    // valor de parking: más pequeño que cualquiera en la celda
+    const minOrd = cell[0]?.ord ?? 0;
+    const PARK = minOrd - 100000; // entero
 
-  try {
-    // 1) aparco 'it' fuera del rango para no colisionar
-    await updateItem(it.id, { ord: PARK });
-    // 2) muevo 'prev' al ord original de 'it'
-    await updateItem(prev.id, { ord: oldItOrd });
-    // 3) coloco 'it' en el ord original de 'prev'
-    await updateItem(it.id, { ord: oldPrevOrd });
-  } catch (e) {
-    showErr(e);
-  }
-};
+    try {
+      await updateItem(it.id, { ord: PARK }); // aparco 'it'
+      await updateItem(prev.id, { ord: oldItOrd }); // prev ocupa lugar de it
+      await updateItem(it.id, { ord: oldPrevOrd }); // it ocupa lugar de prev
+    } catch (e) {
+      showErr(e);
+    }
+  };
 
-/** Mover una posición hacia abajo (swap con siguiente) usando parking INTEGER */
-const moveOneDown = async (it: Item) => {
-  const cell = items
-    .filter(i => i.day === it.day && i.row === it.row)
-    .sort((a, b) => a.ord - b.ord);
+  /** Mover una posición hacia abajo (swap con siguiente) usando parking INTEGER */
+  const moveOneDown = async (it: Item) => {
+    const cell = items
+      .filter((i) => i.day === it.day && i.row === it.row)
+      .sort((a, b) => a.ord - b.ord);
 
-  const idx = cell.findIndex(i => i.id === it.id);
-  if (idx === -1 || idx >= cell.length - 1) return; // ya es el último
+    const idx = cell.findIndex((i) => i.id === it.id);
+    if (idx === -1 || idx >= cell.length - 1) return; // ya es el último
 
-  const next = cell[idx + 1];
-  const oldItOrd = it.ord;
-  const oldNextOrd = next.ord;
+    const next = cell[idx + 1];
+    const oldItOrd = it.ord;
+    const oldNextOrd = next.ord;
 
-  // parking: más grande que cualquiera en la celda
-  const maxOrd = cell[cell.length - 1]?.ord ?? 0;
-  const PARK = maxOrd + 100000; // entero
+    // parking: más grande que cualquiera en la celda
+    const maxOrd = cell[cell.length - 1]?.ord ?? 0;
+    const PARK = maxOrd + 100000; // entero
 
-  try {
-    // 1) aparco 'it'
-    await updateItem(it.id, { ord: PARK });
-    // 2) muevo 'next' al ord original de 'it'
-    await updateItem(next.id, { ord: oldItOrd });
-    // 3) coloco 'it' en el ord original de 'next'
-    await updateItem(it.id, { ord: oldNextOrd });
-  } catch (e) {
-    showErr(e);
-  }
-};
+    try {
+      await updateItem(it.id, { ord: PARK }); // aparco 'it'
+      await updateItem(next.id, { ord: oldItOrd }); // next ocupa lugar de it
+      await updateItem(it.id, { ord: oldNextOrd }); // it ocupa lugar de next
+    } catch (e) {
+      showErr(e);
+    }
+  };
 
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <button className="px-2 py-1 border rounded bg-white" onClick={() => setWeekStart(addDays(weekStart, -7))}>
+        <button
+          className="px-2 py-1 border rounded bg-white"
+          onClick={() => setWeekStart(addDays(weekStart, -7))}
+        >
           <ArrowLeft className="inline w-4 h-4" /> Semana anterior
         </button>
-        <button className="px-2 py-1 border rounded bg-white" onClick={() => setWeekStart(startOfWeekMonday(new Date()))}>
+        <button
+          className="px-2 py-1 border rounded bg-white"
+          onClick={() => setWeekStart(startOfWeekMonday(new Date()))}
+        >
           <Calendar className="inline w-4 h-4" /> Esta semana
         </button>
-        <button className="px-2 py-1 border rounded bg-white" onClick={() => setWeekStart(addDays(weekStart, 7))}>
+        <button
+          className="px-2 py-1 border rounded bg-white"
+          onClick={() => setWeekStart(addDays(weekStart, 7))}
+        >
           Siguiente semana <ArrowRight className="inline w-4 h-4" />
         </button>
 
-        <input className="ml-auto border rounded px-2 py-1" placeholder="Buscar…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input
+          className="ml-auto border rounded px-2 py-1"
+          placeholder="Buscar…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
 
-        <button className="px-2 py-1 border rounded bg-white flex items-center gap-1" onClick={exportCSV} title="Exportar semana en CSV">
+        <button
+          className="px-2 py-1 border rounded bg-white flex items-center gap-1"
+          onClick={exportCSV}
+          title="Exportar semana en CSV"
+        >
           <Download className="w-4 h-4" /> Exportar CSV
         </button>
       </div>
 
       {/* Contenedor con scroll horizontal + scroll táctil */}
       <div className="border rounded-lg overflow-x-auto touch-pan-x">
-        {/* Ancho mínimo para que quepa todo y se pueda hacer scroll */}
-        <div className={`min-w-[${minWidth}px]`}>
-          <div className="grid"
-               style={{ gridTemplateColumns: `${FIRST_COL_WIDTH}px repeat(5, ${DAY_COL_WIDTH}px)` }}>
+        {/* Ancho mínimo para que quepa todo y se pueda hacer scroll (usar style, no clase tailwind con valor dinámico) */}
+        <div style={{ minWidth }}>
+          <div
+            className="grid"
+            style={{ gridTemplateColumns: `${FIRST_COL_WIDTH}px repeat(5, ${DAY_COL_WIDTH}px)` }}
+          >
             {/* Cabecera */}
             <div className="bg-gray-100 border-b px-3 py-2 font-medium sticky top-0 left-0 z-20">
               Sala/Turno
@@ -597,8 +656,12 @@ const moveOneDown = async (it: Item) => {
             {days.map((d, i) => {
               const isToday = toISODate(d) === todayISO;
               return (
-                <div key={i}
-                     className={`border-b px-3 py-2 font-medium sticky top-0 z-10 ${isToday ? 'bg-red-50 text-red-700' : 'bg-gray-100'}`}>
+                <div
+                  key={i}
+                  className={`border-b px-3 py-2 font-medium sticky top-0 z-10 ${
+                    isToday ? 'bg-red-50 text-red-700' : 'bg-gray-100'
+                  }`}
+                >
                   {d.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: '2-digit' })}
                 </div>
               );
@@ -618,7 +681,10 @@ const moveOneDown = async (it: Item) => {
                 editId={editId}
                 setEditId={setEditId}
                 todayISO={todayISO}
-                onAdd={(day) => { if (!canEdit) return; setDraftCell({ day, row }); }}
+                onAdd={(day) => {
+                  if (!canEdit) return;
+                  setDraftCell({ day, row });
+                }}
                 onSubmitAdd={async (day, values) => {
                   if (!canEdit) return;
                   try {
@@ -631,7 +697,9 @@ const moveOneDown = async (it: Item) => {
                       row,
                     });
                     setDraftCell(null);
-                  } catch (e) { showErr(e); }
+                  } catch (e) {
+                    showErr(e);
+                  }
                 }}
                 onCancelAdd={() => setDraftCell(null)}
                 onSaveEdit={async (it, values) => {
@@ -643,25 +711,28 @@ const moveOneDown = async (it: Item) => {
                       proc: values.proc,
                     });
                     setEditId(null);
-                  } catch (e) { showErr(e); }
+                  } catch (e) {
+                    showErr(e);
+                  }
                 }}
                 onMoveUp={async (it) => {
-                    if (!canEdit) return;
-                    await moveOneUp(it);
+                  if (!canEdit) return;
+                  await moveOneUp(it);
                 }}
                 onMoveDown={async (it) => {
-                    if (!canEdit) return;
-                    await moveOneDown(it);
+                  if (!canEdit) return;
+                  await moveOneDown(it);
                 }}
-
                 onMoveLeft={async (it) => {
                   if (!canEdit) return;
                   try {
                     const idx = dayKeys.indexOf(it.day);
                     const nx = ((idx - 1) % dayKeys.length + dayKeys.length) % dayKeys.length; // wrap
                     const max = await getMaxOrd(dayKeys[nx], it.row);
-                    await updateItem(it.id, { day: dayKeys[nx], ord: max + 1 });
-                  } catch (e) { showErr(e); }
+                    await updateItem(it.id, { day: dayKeys[nx], ord: max + 10 });
+                  } catch (e) {
+                    showErr(e);
+                  }
                 }}
                 onMoveRight={async (it) => {
                   if (!canEdit) return;
@@ -669,8 +740,10 @@ const moveOneDown = async (it: Item) => {
                     const idx = dayKeys.indexOf(it.day);
                     const nx = (idx + 1) % dayKeys.length; // wrap
                     const max = await getMaxOrd(dayKeys[nx], it.row);
-                    await updateItem(it.id, { day: dayKeys[nx], ord: max + 1 });
-                  } catch (e) { showErr(e); }
+                    await updateItem(it.id, { day: dayKeys[nx], ord: max + 10 });
+                  } catch (e) {
+                    showErr(e);
+                  }
                 }}
                 onMoveRowUp={async (it) => {
                   if (!canEdit) return;
@@ -679,8 +752,10 @@ const moveOneDown = async (it: Item) => {
                     if (rIdx <= 0) return;
                     const destRow = ROWS[rIdx - 1] as RowKey;
                     const max = await getMaxOrd(it.day, destRow);
-                    await updateItem(it.id, { row: destRow, ord: max + 1 });
-                  } catch (e) { showErr(e); }
+                    await updateItem(it.id, { row: destRow, ord: max + 10 });
+                  } catch (e) {
+                    showErr(e);
+                  }
                 }}
                 onMoveRowDown={async (it) => {
                   if (!canEdit) return;
@@ -689,18 +764,26 @@ const moveOneDown = async (it: Item) => {
                     if (rIdx >= ROWS.length - 1) return;
                     const destRow = ROWS[rIdx + 1] as RowKey;
                     const max = await getMaxOrd(it.day, destRow);
-                    await updateItem(it.id, { row: destRow, ord: max + 1 });
-                  } catch (e) { showErr(e); }
+                    await updateItem(it.id, { row: destRow, ord: max + 10 });
+                  } catch (e) {
+                    showErr(e);
+                  }
                 }}
                 onDelete={async (it) => {
                   if (!canEdit) return;
-                  try { if (confirm('Eliminar paciente?')) await deleteItem(it.id); }
-                  catch (e) { showErr(e); }
+                  try {
+                    if (confirm('Eliminar paciente?')) await deleteItem(it.id);
+                  } catch (e) {
+                    showErr(e);
+                  }
                 }}
                 onToggleDone={async (it) => {
-                   if (!canEdit) return;
-                   try { await updateItem(it.id, { done: !it.done }); }
-                   catch (e) { showErr(e); }
+                  if (!canEdit) return;
+                  try {
+                    await updateItem(it.id, { done: !it.done });
+                  } catch (e) {
+                    showErr(e);
+                  }
                 }}
               />
             ))}
@@ -740,6 +823,7 @@ function RowBlock({
   onMoveRowUp,
   onMoveRowDown,
   onDelete,
+  onToggleDone,
 }: {
   row: RowKey;
   dayKeys: string[];
@@ -786,15 +870,17 @@ function RowBlock({
         const isDraftHere = draftCell?.day === dk && draftCell?.row === row;
 
         return (
-          <div key={dk + row}
-               className={`border-t border-r p-2 min-h-[140px] ${isToday ? 'bg-red-50/40' : 'bg-white'}`}>
+          <div
+            key={dk + row}
+            className={`border-t border-r p-2 min-h-[140px] ${isToday ? 'bg-red-50/40' : 'bg-white'}`}
+          >
             <div className="flex flex-col gap-2">
               {cell.map((it, idx) =>
                 editId === it.id ? (
                   <InlineEditorCard
                     key={it.id}
                     title="Editar paciente"
-                    initial={{ name: it.name, room: it.room, dx: it.dx, proc: it.proc }}
+                    initial={{ name: it.name || '', room: it.room || '', dx: it.dx || '', proc: (it.proc as ProcKey) }}
                     onCancel={() => setEditId(null)}
                     onSave={(vals) => onSaveEdit(it, vals)}
                   />
@@ -826,8 +912,10 @@ function RowBlock({
               )}
 
               {canEdit && !isDraftHere && (
-                <button className="px-2 py-1 border rounded text-sm bg-white w-fit"
-                        onClick={() => onAdd(dk)}>
+                <button
+                  className="px-2 py-1 border rounded text-sm bg-white w-fit"
+                  onClick={() => onAdd(dk)}
+                >
                   <Plus className="inline w-4 h-4 mr-1" /> Añadir paciente
                 </button>
               )}
@@ -844,8 +932,13 @@ function CardItem({
   idx,
   canEdit,
   onEdit,
-  onMoveUp, onMoveDown, onMoveLeft, onMoveRight, onMoveRowUp, onMoveRowDown,
-  onToggleDone,              // ⬅️ NUEVO
+  onMoveUp,
+  onMoveDown,
+  onMoveLeft,
+  onMoveRight,
+  onMoveRowUp,
+  onMoveRowDown,
+  onToggleDone,
   onDelete,
 }: {
   it: Item;
@@ -858,12 +951,12 @@ function CardItem({
   onMoveRight: () => void;
   onMoveRowUp: () => void;
   onMoveRowDown: () => void;
-  onToggleDone: () => void;  // ⬅️ NUEVO
+  onToggleDone: () => void;
   onDelete: () => void;
 }) {
-
-  const containerCls =
-    `rounded-xl border p-3 flex flex-col gap-2 shadow-sm ${it.done ? 'bg-gray-100 border-gray-300 text-gray-600' : 'bg-white'}`;
+  const containerCls = `rounded-xl border p-3 flex flex-col gap-2 shadow-sm ${
+    it.done ? 'bg-gray-100 border-gray-300 text-gray-600' : 'bg-white'
+  }`;
 
   return (
     <div className={containerCls}>
@@ -886,8 +979,11 @@ function CardItem({
         {canEdit && (
           <div className="flex items-center gap-1">
             {/* Finalizar / Reabrir */}
-            <button className="p-1 rounded hover:bg-gray-100" onClick={onToggleDone}
-                    title={it.done ? 'Marcar como pendiente' : 'Marcar como finalizado'}>
+            <button
+              className="p-1 rounded hover:bg-gray-100"
+              onClick={onToggleDone}
+              title={it.done ? 'Marcar como pendiente' : 'Marcar como finalizado'}
+            >
               {it.done ? <CheckCircle2 className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
             </button>
 
@@ -925,10 +1021,9 @@ function CardItem({
       {/* Chips inferiores */}
       <div className={`flex flex-wrap gap-2 text-xs ${it.done ? 'text-gray-500' : 'text-gray-600'}`}>
         {it.room && <span className="px-2 py-0.5 rounded border bg-gray-50">Hab: {it.room}</span>}
-        {it.dx   && <span className="px-2 py-0.5 rounded border bg-gray-50">Dx: {it.dx}</span>}
+        {it.dx && <span className="px-2 py-0.5 rounded border bg-gray-50">Dx: {it.dx}</span>}
         <span className={`px-2 py-0.5 rounded border ${procColor(it.proc as ProcKey)}`}>{it.proc}</span>
       </div>
     </div>
   );
 }
-

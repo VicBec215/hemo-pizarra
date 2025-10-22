@@ -90,20 +90,11 @@ export async function addItem(input: {
 }
 
 // src/lib/data.ts (solo la función updateItem)
-export async function updateItem(
-  id: string,
-  patch: Partial<Pick<Item, 'name' | 'room' | 'dx' | 'proc' | 'day' | 'row' | 'ord'>>
-) {
-  const { data, error } = await supabase
-    .from('items')
-    .update(patch)
-    .eq('id', id)
-    .select()
-    .maybeSingle(); // ⬅️ antes era .single()
-
+export async function updateItem(id: string, patch: Partial<Pick<Item, 'name'|'room'|'dx'|'proc'|'day'|'row'|'ord'|'done'>>) {
+  const { error } = await supabase.from('items').update(patch).eq('id', id);
   if (error) throw error;
-  return data;
 }
+
 
 
 export async function deleteItem(id: string) {
