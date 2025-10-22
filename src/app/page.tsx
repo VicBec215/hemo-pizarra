@@ -249,22 +249,41 @@ function AuthButtons() {
   const [busy, setBusy] = useState(false);
 
   const doLoginPassword = async () => {
-    try {
-      if (!email || !password) {
-        alert('Introduce email y contraseña');
-        return;
-      }
-      setBusy(true);
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      // Refresco completo para asegurar estado consistente
-      window.location.replace('/');
-    } catch (e) {
-      showErr(e);
-    } finally {
-      setBusy(false);
+  try {
+    if (!email || !password) {
+      alert('Introduce email y contraseña');
+      return;
     }
-  };
+    setBusy(true);
+
+    // 1) Login
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+
+    // 2) Espera breve para que la sesión se persista en localStorage (evita carrera)
+    await new Promise((r) => setTimeout(r, 150));
+
+    // 3) Verifica que ya hay usuario en memoria
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData?.user) {
+      throw new Error('No se pudo obtener sesión tras el login. Prueba de nuevo.');
+    }
+
+    // 4) Opcional: re-evalúa rol ya, sin esperar al listener
+    try {
+      // si getMyRole falla por cualquier motivo, no bloqueamos la navegación
+      await getMyRole();
+    } catch {}
+
+    // 5) Refresco completo para forzar UI consistente
+    window.location.replace('/');
+  } catch (e) {
+    showErr(e);
+  } finally {
+    setBusy(false);
+  }
+};
+
 
   const sendReset = async () => {
     try {
