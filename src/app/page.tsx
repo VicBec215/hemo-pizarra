@@ -37,6 +37,8 @@ import {
   Pencil,
   Download,
 } from 'lucide-react';
+import { CheckCircle2, Circle } from 'lucide-react';
+
 
 /** Util: clases para badges de procedimiento */
 function procColor(proc: ProcKey): string {
@@ -114,55 +116,55 @@ function InlineEditorCard({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-        <label className="text-xs">
-          Nombre/ID (evitar nombre completo)
-          <input
-            className="mt-1 w-full border rounded px-2 py-1"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Iniciales o ID"
-          />
-        </label>
-        <label className="text-xs">
-          Habitación
-          <input
-            className="mt-1 w-full border rounded px-2 py-1"
-            value={room}
-            onChange={(e) => setRoom(e.target.value)}
-            placeholder="312B"
-          />
-        </label>
-      </div>
+        // Encabezado tal como lo tienes…
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-        <label className="text-xs">
-          Diagnóstico (texto libre)
-          <input
-            className="mt-1 w-full border rounded px-2 py-1"
-            value={dx}
-            onChange={(e) => setDx(e.target.value)}
-            placeholder="p. ej., SCA, CHD..."
-          />
-        </label>
+{/* Bloque de nombre a TODO el ancho y con fuente mayor */}
+<label className="text-xs">
+  Nombre/ID (evitar nombre completo)
+  <input
+    className="mt-1 w-full border rounded px-3 py-2 text-base"   // ⬅️ más ancho y grande
+    value={name}
+    onChange={(e) => setName(e.target.value)}
+    placeholder="Iniciales o ID"
+  />
+</label>
 
-        <label className="text-xs">
-          Procedimiento
-          <select
-            className="mt-1 w-full border rounded px-2 py-1 bg-white"
-            value={proc}
-            onChange={(e) => setProc(e.target.value as ProcKey)}
-          >
-            {PROCS.map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-    </div>
-  );
-}
+{/* El resto en dos columnas */}
+<div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+  <label className="text-xs">
+    Habitación
+    <input
+      className="mt-1 w-full border rounded px-2 py-1"
+      value={room}
+      onChange={(e) => setRoom(e.target.value)}
+      placeholder="312B"
+    />
+  </label>
+
+  <label className="text-xs">
+    Diagnóstico (texto libre)
+    <input
+      className="mt-1 w-full border rounded px-2 py-1"
+      value={dx}
+      onChange={(e) => setDx(e.target.value)}
+      placeholder="p. ej., SCA..."
+    />
+  </label>
+
+  <label className="text-xs">
+    Procedimiento
+    <select
+      className="mt-1 w-full border rounded px-2 py-1 bg-white"
+      value={proc}
+      onChange={(e) => setProc(e.target.value as ProcKey)}
+    >
+      {PROCS.map((o) => (
+        <option key={o} value={o}>{o}</option>
+      ))}
+    </select>
+  </label>
+</div>
+
 
 export default function Page() {
   const [sessionReady, setSessionReady] = useState(false);
@@ -469,7 +471,7 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
   function exportCSV() {
     // Cabecera
     const rows: string[] = [];
-    const header = ['Día', 'Sala/Turno', 'Orden', 'Nombre/ID', 'Habitación', 'Diagnóstico', 'Procedimiento'];
+    const header = ['Día', 'Sala/Turno', 'Orden', 'Nombre/ID', 'Habitación', 'Diagnóstico', 'Procedimiento', 'Finalizado'];
     rows.push(header.map(escapeCSV).join(','));
 
     // Por cada día/sala, en orden
@@ -487,6 +489,7 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
             it.room ?? '',
             it.dx ?? '',
             it.proc ?? '',
+            it.done ? 'Sí' : 'No',
           ];
           rows.push(line.map(escapeCSV).join(','));
         });
@@ -694,6 +697,11 @@ const moveOneDown = async (it: Item) => {
                   try { if (confirm('Eliminar paciente?')) await deleteItem(it.id); }
                   catch (e) { showErr(e); }
                 }}
+                onToggleDone={async (it) => {
+                   if (!canEdit) return;
+                   try { await updateItem(it.id, { done: !it.done }); }
+                   catch (e) { showErr(e); }
+                }}
               />
             ))}
           </div>
@@ -754,6 +762,7 @@ function RowBlock({
   onMoveRowUp: (it: Item) => void;
   onMoveRowDown: (it: Item) => void;
   onDelete: (it: Item) => void;
+  onToggleDone: (it: Item) => void;
 }) {
   return (
     <>
@@ -803,6 +812,7 @@ function RowBlock({
                     onMoveRowUp={() => onMoveRowUp(it)}
                     onMoveRowDown={() => onMoveRowDown(it)}
                     onDelete={() => onDelete(it)}
+                    onToggleDone={() => onToggleDone(it)}
                   />
                 )
               )}
@@ -834,80 +844,91 @@ function CardItem({
   idx,
   canEdit,
   onEdit,
-  onMoveUp,
-  onMoveDown,
-  onMoveLeft,
-  onMoveRight,
-  onMoveRowUp,
-  onMoveRowDown,
+  onMoveUp, onMoveDown, onMoveLeft, onMoveRight, onMoveRowUp, onMoveRowDown,
+  onToggleDone,              // ⬅️ NUEVO
   onDelete,
 }: {
   it: Item;
   idx: number;
   canEdit: boolean;
-  onEdit: () => void;               // NUEVO botón editar
-  onMoveUp: () => void;             // subir orden en celda
-  onMoveDown: () => void;           // bajar orden en celda
-  onMoveLeft: () => void;           // cambiar día -
-  onMoveRight: () => void;          // cambiar día +
-  onMoveRowUp: () => void;          // pasar a sala anterior
-  onMoveRowDown: () => void;        // pasar a sala siguiente
+  onEdit: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onMoveLeft: () => void;
+  onMoveRight: () => void;
+  onMoveRowUp: () => void;
+  onMoveRowDown: () => void;
+  onToggleDone: () => void;  // ⬅️ NUEVO
   onDelete: () => void;
 }) {
+
+  const containerCls =
+    `rounded-xl border p-3 flex flex-col gap-2 shadow-sm ${it.done ? 'bg-gray-100 border-gray-300 text-gray-600' : 'bg-white'}`;
+
   return (
-    <div className="bg-white rounded-xl border p-3 flex flex-col gap-2 shadow-sm">
+    <div className={containerCls}>
+      {/* Línea superior con orden, nombre y controles */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-6 h-6 rounded-full border flex items-center justify-center text-xs font-medium">
             {idx + 1}
           </div>
-          <div className="text-sm font-semibold truncate" title={it.name}>
+          <div className="text-sm font-semibold truncate" title={it.name ?? ''}>
             {it.name || '(sin nombre)'}
           </div>
+          {it.done && (
+            <span className="ml-2 px-2 py-0.5 rounded-full text-[11px] border bg-gray-200">
+              Finalizado
+            </span>
+          )}
         </div>
+
         {canEdit && (
           <div className="flex items-center gap-1">
-            {/* Editar */}
-            <button className="p-1 rounded hover:bg-gray-100" onClick={onEdit} title="Editar">
-              <Pencil className="w-4 h-4" />
+            {/* Finalizar / Reabrir */}
+            <button className="p-1 rounded hover:bg-gray-100" onClick={onToggleDone}
+                    title={it.done ? 'Marcar como pendiente' : 'Marcar como finalizado'}>
+              {it.done ? <CheckCircle2 className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
             </button>
 
-            {/* Día anterior / siguiente (wrap) */}
+            {/* Mover entre días/salas/orden */}
             <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveLeft} title="Día anterior (wrap)">
               <ArrowLeft className="w-4 h-4" />
             </button>
-
-            {/* Orden dentro de la celda */}
-            <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveUp} title="Subir orden">
+            <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveUp} title="Subir orden (una posición)">
               <ArrowUp className="w-4 h-4" />
             </button>
-            <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveDown} title="Bajar orden">
+            <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveDown} title="Bajar orden (una posición)">
               <ArrowDown className="w-4 h-4" />
             </button>
-
-            {/* Pasar a otra sala (misma fecha) */}
             <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveRowUp} title="Pasar a sala anterior">
               <ChevronsUp className="w-4 h-4" />
             </button>
             <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveRowDown} title="Pasar a sala siguiente">
               <ChevronsDown className="w-4 h-4" />
             </button>
-
             <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveRight} title="Día siguiente (wrap)">
               <ArrowRight className="w-4 h-4" />
             </button>
 
+            {/* Editar / Eliminar */}
+            <button className="p-1 rounded hover:bg-gray-100" onClick={onEdit} title="Editar">
+              <Pencil className="w-4 h-4" />
+            </button>
             <button className="p-1 rounded hover:bg-gray-100" onClick={onDelete} title="Eliminar">
               <Trash2 className="w-4 h-4" />
             </button>
           </div>
         )}
       </div>
-      <div className="flex flex-wrap gap-2 text-xs text-gray-600">
+
+      {/* Chips inferiores */}
+      <div className={`flex flex-wrap gap-2 text-xs ${it.done ? 'text-gray-500' : 'text-gray-600'}`}>
         {it.room && <span className="px-2 py-0.5 rounded border bg-gray-50">Hab: {it.room}</span>}
-        {it.dx &&   <span className="px-2 py-0.5 rounded border bg-gray-50">Dx: {it.dx}</span>}
-        <span className={`px-2 py-0.5 rounded border ${procColor(it.proc)}`}>{it.proc}</span>
+        {it.dx   && <span className="px-2 py-0.5 rounded border bg-gray-50">Dx: {it.dx}</span>}
+        <span className={`px-2 py-0.5 rounded border ${procColor(it.proc as ProcKey)}`}>{it.proc}</span>
       </div>
     </div>
   );
 }
+

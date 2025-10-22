@@ -11,6 +11,7 @@ export type Item = {
   day: string;   // 'YYYY-MM-DD'
   row: RowKey;   // 'Sala 1' | 'Sala 2' | 'Sala 3' | 'Tarde'
   ord: number;   // orden libre (puede tener huecos)
+  done: boolean;
   created_at: string;
   created_by: string | null;
 };
@@ -48,7 +49,7 @@ export async function listWeek(mondayISO: string) {
 
   const { data, error } = await supabase
     .from('items')
-    .select('*')
+    .select('id, name, room, dx, proc, day, row, ord, done')
     .gte('day', mondayISO)
     .lte('day', fridayISO)
     .order('day', { ascending: true })
@@ -59,14 +60,31 @@ export async function listWeek(mondayISO: string) {
   return (data ?? []) as Item[];
 }
 
-/** Inserta al final de la celda (day,row) usando ord = max + 1 */
-export async function addItem(partial: Omit<Item,'id'|'created_at'|'created_by'|'ord'>) {
-  const max = await getMaxOrd(partial.day, partial.row);
+export async function addItem(input: {
+  name?: string;
+  room?: string;
+  dx?: string;
+  proc: ProcKey;
+  day: string;
+  row: RowKey;
+  done?: boolean; // nuevo campo, por defecto false
+}) {
+  const max = await getMaxOrd(input.day, input.row);
   const { data, error } = await supabase
     .from('items')
-    .insert([{ ...partial, ord: max + 1 }])
-    .select('*')
-    .single();
+    .insert([{
+      name: input.name ?? '',
+      room: input.room ?? '',
+      dx: input.dx ?? '',
+      proc: input.proc,
+      day: input.day,
+      row: input.row,
+      ord: max + 10,          // ⬅️ inserta al final de la celda
+      done: input.done ?? false,
+    }])
+    .select()
+    .maybeSingle();
+
   if (error) throw error;
   return data as Item;
 }
