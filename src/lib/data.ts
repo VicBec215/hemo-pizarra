@@ -111,13 +111,11 @@ export function subscribeItems(onChange: () => void) {
 }
 
 export async function getMyRole(): Promise<'editor'|'viewer'|'unknown'> {
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: session } = await supabase.auth.getSession();
+  const user = session?.session?.user;
   if (!user) return 'unknown';
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle();
-  if (error) throw error;
-  return (data?.role ?? 'viewer') as any;
+
+  // Si tienes una tabla 'editors' o 'profiles' para marcar editores:
+  const { data } = await supabase.from('editors').select('user_id').eq('user_id', user.id).maybeSingle();
+  return data ? 'editor' : 'viewer';
 }
