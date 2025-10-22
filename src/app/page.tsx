@@ -1,5 +1,10 @@
 'use client';
 
+// ⬇️ Forzamos que NO haya prerrender ni caché en esta ruta
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import {
@@ -22,29 +27,17 @@ import {
   getMaxOrd,
 } from '@/lib/data';
 import {
-  ArrowLeft,
-  ArrowRight,
-  ArrowUp,
-  ArrowDown,
-  Plus,
-  Trash2,
-  Calendar,
-  ChevronsUp,
-  ChevronsDown,
-  Save,
-  X,
-  Pencil,
-  Download,
+  ArrowLeft, ArrowRight, ArrowUp, ArrowDown,
+  Plus, Trash2, Calendar, ChevronsUp, ChevronsDown,
+  Save, X, Pencil, Download,
 } from 'lucide-react';
 import { CheckCircle2, Circle } from 'lucide-react';
 
-/* -------------------- util -------------------- */
+/* ---------------- util ---------------- */
 
 function clearLocalAuth() {
   try {
-    Object.keys(localStorage).forEach((k) => {
-      if (k.startsWith('sb-')) localStorage.removeItem(k);
-    });
+    Object.keys(localStorage).forEach((k) => { if (k.startsWith('sb-')) localStorage.removeItem(k); });
   } catch {}
 }
 
@@ -52,11 +45,8 @@ function procColor(proc: ProcKey): string {
   const lower = proc.toLowerCase();
   if (lower === 'coronaria' || lower === 'c.derecho') return 'bg-green-100 text-green-800 border-green-300';
   if (lower === 'icp') return 'bg-orange-100 text-orange-800 border-orange-300';
-  if (
-    lower === 'oclusión crónica' || lower === 'oclusion crónica' ||
-    lower === 'oclusión cronica' || lower === 'oclusion cronica' ||
-    lower === 'oclusión crónica.'
-  ) return 'bg-red-100 text-red-800 border-red-300';
+  if (['oclusión crónica','oclusion crónica','oclusión cronica','oclusion cronica','oclusión crónica.'].includes(lower))
+    return 'bg-red-100 text-red-800 border-red-300';
   if (['tavi','mitraclip','triclip','orejuela','fop','cia'].includes(lower))
     return 'bg-purple-100 text-purple-800 border-purple-300';
   return 'bg-gray-200 text-gray-900 border-gray-300';
@@ -81,7 +71,7 @@ function showErr(e: unknown) {
   }
 }
 
-/* -------------------- editor inline -------------------- */
+/* ------------- Editor inline ------------- */
 
 function InlineEditorCard({
   title = 'Nuevo paciente',
@@ -152,9 +142,7 @@ function InlineEditorCard({
             value={proc}
             onChange={(e) => setProc(e.target.value as ProcKey)}
           >
-            {PROCS.map((o) => (
-              <option key={o} value={o}>{o}</option>
-            ))}
+            {PROCS.map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
         </label>
       </div>
@@ -162,49 +150,49 @@ function InlineEditorCard({
   );
 }
 
-/* -------------------- página -------------------- */
+/* ------------- Página ------------- */
 
 export default function Page() {
   const [sessionReady, setSessionReady] = useState(false);
   const [role, setRole] = useState<'editor' | 'viewer' | 'unknown'>('unknown');
 
-  // ✅ Versión estable y simple: sin timers, sin signOut automático
+  // Versión estable y dinámica: sin timeouts ni signOut automáticos.
   useEffect(() => {
     let cancelled = false;
 
-    const apply = async () => {
-      try {
-        const { data } = await supabase.auth.getUser();
-        if (cancelled) return;
-        if (data?.user) {
-          const r = await getMyRole().catch(() => 'viewer' as const);
+    async function apply(label: string) {
+      const { data } = await supabase.auth.getUser();
+      console.log('[AUTH]', label, 'user =', !!data?.user);
+      if (cancelled) return;
+      if (data?.user) {
+        try {
+          const r = await getMyRole();
           if (!cancelled) setRole(r);
-        } else {
-          setRole('unknown');
+          console.log('[AUTH] role =', r);
+        } catch (e) {
+          console.warn('[AUTH] getMyRole() falló, forzando viewer', e);
+          if (!cancelled) setRole('viewer');
         }
-      } finally {
-        if (!cancelled) setSessionReady(true);
+      } else {
+        setRole('unknown');
       }
-    };
+      if (!cancelled) setSessionReady(true);
+    }
 
-    apply();
-    const { data: sub } = supabase.auth.onAuthStateChange(() => apply());
-
-    return () => {
-      cancelled = true;
-      sub.subscription.unsubscribe();
-    };
+    apply('mount');
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt) => apply('onAuthStateChange'));
+    return () => { cancelled = true; sub.subscription.unsubscribe(); };
   }, []);
 
   return (
     <div className="p-4 max-w-[1200px] mx-auto">
       <Header role={role} />
-      {role === 'unknown' ? <AuthBlock /> : <Board role={role} />}
+      {(!sessionReady || role === 'unknown') ? <AuthBlock /> : <Board role={role} />}
     </div>
   );
 }
 
-/* -------------------- cabecera + auth -------------------- */
+/* ------------- Cabecera + Auth ------------- */
 
 function Header({ role }: { role: 'editor' | 'viewer' | 'unknown' }) {
   const [showChange, setShowChange] = useState(false);
@@ -242,8 +230,8 @@ function AuthButtons() {
       setBusy(true);
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      // refresco completo tras login
-      window.location.replace('/');
+      console.log('[AUTH] login OK, recargando…');
+      window.location.replace('/'); // refresco completo
     } catch (e) {
       showErr(e);
     } finally {
@@ -267,6 +255,7 @@ function AuthButtons() {
   const doLogout = async () => {
     try {
       setBusy(true);
+      console.log('[AUTH] logout…');
       await supabase.auth.signOut({ scope: 'global' } as any);
     } catch {}
     clearLocalAuth();
@@ -323,13 +312,11 @@ function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
       if (!currentPwd || !newPwd) return alert('Completa las contraseñas.');
       if (newPwd.length < 8) return alert('La nueva contraseña debe tener al menos 8 caracteres.');
       if (newPwd !== confirmPwd) return alert('La confirmación no coincide.');
-
       setBusy(true);
       const { error: loginErr } = await supabase.auth.signInWithPassword({ email, password: currentPwd });
       if (loginErr) throw loginErr;
       const { error } = await supabase.auth.updateUser({ password: newPwd });
       if (error) throw error;
-
       alert('Contraseña cambiada correctamente. Vuelve a entrar con la nueva.');
       await supabase.auth.signOut();
       onClose();
@@ -358,45 +345,26 @@ function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
 
           <label className="block text-xs">
             Contraseña actual
-            <input
-              type="password"
-              className="mt-1 w-full border rounded px-2 py-1"
-              value={currentPwd}
-              onChange={(e) => setCurrentPwd(e.target.value)}
-              autoComplete="current-password"
-            />
+            <input type="password" className="mt-1 w-full border rounded px-2 py-1"
+                   value={currentPwd} onChange={(e) => setCurrentPwd(e.target.value)} autoComplete="current-password" />
           </label>
 
           <label className="block text-xs">
             Nueva contraseña
-            <input
-              type="password"
-              className="mt-1 w-full border rounded px-2 py-1"
-              value={newPwd}
-              onChange={(e) => setNewPwd(e.target.value)}
-              autoComplete="new-password"
-            />
+            <input type="password" className="mt-1 w-full border rounded px-2 py-1"
+                   value={newPwd} onChange={(e) => setNewPwd(e.target.value)} autoComplete="new-password" />
           </label>
 
           <label className="block text-xs">
             Confirmar nueva contraseña
-            <input
-              type="password"
-              className="mt-1 w-full border rounded px-2 py-1"
-              value={confirmPwd}
-              onChange={(e) => setConfirmPwd(e.target.value)}
-              autoComplete="new-password"
-            />
+            <input type="password" className="mt-1 w-full border rounded px-2 py-1"
+                   value={confirmPwd} onChange={(e) => setConfirmPwd(e.target.value)} autoComplete="new-password" />
           </label>
         </div>
 
         <div className="mt-4 flex justify-end gap-2">
-          <button className="px-3 py-1 rounded border bg-white text-sm" onClick={onClose} disabled={busy}>
-            Cancelar
-          </button>
-          <button className="px-3 py-1 rounded border bg-white text-sm disabled:opacity-60" onClick={onSave} disabled={busy}>
-            Guardar
-          </button>
+          <button className="px-3 py-1 rounded border bg-white text-sm" onClick={onClose} disabled={busy}>Cancelar</button>
+          <button className="px-3 py-1 rounded border bg-white text-sm disabled:opacity-60" onClick={onSave} disabled={busy}>Guardar</button>
         </div>
       </div>
     </div>
@@ -414,13 +382,12 @@ function AuthBlock() {
   );
 }
 
-/* -------------------- tablero -------------------- */
+/* ------------- Tablero ------------- */
 
 function Board({ role }: { role: 'editor' | 'viewer' }) {
   const [weekStart, setWeekStart] = useState<Date>(() => startOfWeekMonday(new Date()));
   const [items, setItems] = useState<Item[]>([]);
   const [search, setSearch] = useState('');
-
   const [draftCell, setDraftCell] = useState<{ day: string; row: RowKey } | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
 
@@ -429,7 +396,8 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
   const todayISO = toISODate(new Date());
 
   const reload = useCallback(async () => {
-    setItems(await listWeek(toISODate(weekStart)));
+    const data = await listWeek(toISODate(weekStart));
+    setItems(data);
   }, [weekStart]);
 
   useEffect(() => { reload(); }, [reload]);
@@ -446,10 +414,8 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
     rows.push(header.map(escapeCSV).join(','));
     for (const day of dayKeys) {
       for (const row of ROWS) {
-        const cell = items.filter(i => i.day === day && i.row === row).sort((a,b)=>a.ord-b.ord);
-        cell.forEach((it, idx) => {
-          rows.push([day,row,String(idx+1),it.name??'',it.room??'',it.dx??'',it.proc??'',it.done?'Sí':'No'].map(escapeCSV).join(','));
-        });
+        const cell = items.filter(i => i.day===day && i.row===row).sort((a,b)=>a.ord-b.ord);
+        cell.forEach((it, idx) => rows.push([day,row,String(idx+1),it.name??'',it.room??'',it.dx??'',it.proc??'',it.done?'Sí':'No'].map(escapeCSV).join(',')));
       }
     }
     const blob = new Blob(['\uFEFF'+rows.join('\n')], { type:'text/csv;charset=utf-8;' });
@@ -530,10 +496,8 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
                 }}
                 onCancelAdd={()=>setDraftCell(null)}
                 onSaveEdit={async (it, values)=>{
-                  try {
-                    await updateItem(it.id, { name: values.name, room: values.room, dx: values.dx, proc: values.proc });
-                    setEditId(null);
-                  } catch(e){ showErr(e); }
+                  try { await updateItem(it.id, { name: values.name, room: values.room, dx: values.dx, proc: values.proc }); setEditId(null); }
+                  catch(e){ showErr(e); }
                 }}
                 onMoveUp={async (it)=>{ if(role!=='editor') return; await moveOneUp(it); }}
                 onMoveDown={async (it)=>{ if(role!=='editor') return; await moveOneDown(it); }}
@@ -570,7 +534,7 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
   );
 }
 
-/* -------------------- helpers -------------------- */
+/* helpers */
 
 function escapeCSV(s: string): string {
   const needs = /[",\n]/.test(s);
@@ -578,7 +542,7 @@ function escapeCSV(s: string): string {
   return needs ? `"${t}"` : t;
 }
 
-/* -------------------- subcomponentes -------------------- */
+/* subcomponentes */
 
 function RowBlock(props: {
   row: RowKey;
@@ -674,31 +638,15 @@ function RowBlock(props: {
 }
 
 function CardItem({
-  it,
-  idx,
-  canEdit,
-  onEdit,
-  onMoveUp,
-  onMoveDown,
-  onMoveLeft,
-  onMoveRight,
-  onMoveRowUp,
-  onMoveRowDown,
-  onToggleDone,
-  onDelete,
+  it, idx, canEdit, onEdit,
+  onMoveUp, onMoveDown, onMoveLeft, onMoveRight, onMoveRowUp, onMoveRowDown,
+  onToggleDone, onDelete,
 }: {
-  it: Item;
-  idx: number;
-  canEdit: boolean;
-  onEdit: () => void;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
-  onMoveLeft: () => void;
-  onMoveRight: () => void;
-  onMoveRowUp: () => void;
-  onMoveRowDown: () => void;
-  onToggleDone: () => void;
-  onDelete: () => void;
+  it: Item; idx: number; canEdit: boolean; onEdit: () => void;
+  onMoveUp: () => void; onMoveDown: () => void;
+  onMoveLeft: () => void; onMoveRight: () => void;
+  onMoveRowUp: () => void; onMoveRowDown: () => void;
+  onToggleDone: () => void; onDelete: () => void;
 }) {
   const containerCls =
     `rounded-xl border p-3 flex flex-col gap-2 shadow-sm ${it.done ? 'bg-gray-100 border-gray-300 text-gray-600' : 'bg-white'}`;
@@ -719,14 +667,12 @@ function CardItem({
             <button className="p-1 rounded hover:bg-gray-100" onClick={onToggleDone} title={it.done ? 'Marcar como pendiente' : 'Marcar como finalizado'}>
               {it.done ? <CheckCircle2 className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
             </button>
-
             <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveLeft} title="Día anterior (wrap)"><ArrowLeft className="w-4 h-4" /></button>
             <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveUp} title="Subir orden (una posición)"><ArrowUp className="w-4 h-4" /></button>
             <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveDown} title="Bajar orden (una posición)"><ArrowDown className="w-4 h-4" /></button>
             <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveRowUp} title="Pasar a sala anterior"><ChevronsUp className="w-4 h-4" /></button>
             <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveRowDown} title="Pasar a sala siguiente"><ChevronsDown className="w-4 h-4" /></button>
             <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveRight} title="Día siguiente (wrap)"><ArrowRight className="w-4 h-4" /></button>
-
             <button className="p-1 rounded hover:bg-gray-100" onClick={onEdit} title="Editar"><Pencil className="w-4 h-4" /></button>
             <button className="p-1 rounded hover:bg-gray-100" onClick={onDelete} title="Eliminar"><Trash2 className="w-4 h-4" /></button>
           </div>
