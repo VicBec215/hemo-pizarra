@@ -1,13 +1,10 @@
 // src/app/page.tsx
-// Server Component (sin estado). Monta el cliente sin SSR para evitar
-// problemas de cookies/localStorage en Chrome/Safari.
+// Server Component mínimo. Importa el componente cliente y fuerza modo dinámico.
 
-import dynamic from 'next/dynamic';
+import PageClient from './PageClient';
 
-export const revalidate = 0;              // no prerender, siempre dinámico
-export const dynamic = 'force-dynamic';   // fuerza render 100% en cliente
-
-const PageClient = dynamic(() => import('./PageClient'), { ssr: false });
+export const dynamic = 'force-dynamic'; // evita prerender/ISR
+export const revalidate = 0;            // sin cacheo estático
 
 export default function Page() {
   return <PageClient />;
