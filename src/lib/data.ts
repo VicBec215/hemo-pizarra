@@ -111,11 +111,17 @@ export function subscribeItems(onChange: () => void) {
 }
 
 export async function getMyRole(): Promise<'editor'|'viewer'|'unknown'> {
-  const { data: session } = await supabase.auth.getSession();
-  const user = session?.session?.user;
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) return 'unknown';
 
-  // Si tienes una tabla 'editors' o 'profiles' para marcar editores:
-  const { data } = await supabase.from('editors').select('user_id').eq('user_id', user.id).maybeSingle();
+  const { data, error } = await supabase
+    .from('editors')
+    .select('user_id')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  // PGRST116 = not found con maybeSingle, lo tratamos como “no editor”
+  if (error && error.code !== 'PGRST116') throw error;
+
   return data ? 'editor' : 'viewer';
 }
