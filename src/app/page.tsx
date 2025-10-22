@@ -38,44 +38,30 @@ import {
 } from 'lucide-react';
 import { CheckCircle2, Circle } from 'lucide-react';
 
-/* -------------------------- utilidades varias -------------------------- */
+/* -------------------- util -------------------- */
 
 function clearLocalAuth() {
   try {
-    // Supabase guarda claves que empiezan por 'sb-'
     Object.keys(localStorage).forEach((k) => {
       if (k.startsWith('sb-')) localStorage.removeItem(k);
     });
-  } catch {
-    /* ignore */
-  }
+  } catch {}
 }
 
-/** Colores para el chip de procedimiento */
 function procColor(proc: ProcKey): string {
   const lower = proc.toLowerCase();
-  if (lower === 'coronaria' || lower === 'c.derecho') {
-    return 'bg-green-100 text-green-800 border-green-300';
-  }
-  if (lower === 'icp') {
-    return 'bg-orange-100 text-orange-800 border-orange-300';
-  }
+  if (lower === 'coronaria' || lower === 'c.derecho') return 'bg-green-100 text-green-800 border-green-300';
+  if (lower === 'icp') return 'bg-orange-100 text-orange-800 border-orange-300';
   if (
-    lower === 'oclusión crónica' ||
-    lower === 'oclusion crónica' ||
-    lower === 'oclusión cronica' ||
-    lower === 'oclusion cronica' ||
+    lower === 'oclusión crónica' || lower === 'oclusion crónica' ||
+    lower === 'oclusión cronica' || lower === 'oclusion cronica' ||
     lower === 'oclusión crónica.'
-  ) {
-    return 'bg-red-100 text-red-800 border-red-300';
-  }
-  if (['tavi', 'mitraclip', 'triclip', 'orejuela', 'fop', 'cia'].includes(lower)) {
+  ) return 'bg-red-100 text-red-800 border-red-300';
+  if (['tavi','mitraclip','triclip','orejuela','fop','cia'].includes(lower))
     return 'bg-purple-100 text-purple-800 border-purple-300';
-  }
   return 'bg-gray-200 text-gray-900 border-gray-300';
 }
 
-/** Errores legibles */
 function showErr(e: unknown) {
   try {
     const obj = e as Record<string, unknown>;
@@ -95,7 +81,7 @@ function showErr(e: unknown) {
   }
 }
 
-/* -------------------------- editor inline -------------------------- */
+/* -------------------- editor inline -------------------- */
 
 function InlineEditorCard({
   title = 'Nuevo paciente',
@@ -115,24 +101,19 @@ function InlineEditorCard({
 
   return (
     <div className="bg-white rounded-xl border p-3 flex flex-col gap-3 shadow-sm">
-      {/* Barra superior: título + acciones */}
       <div className="flex items-center justify-between">
         <div className="text-sm font-semibold">{title}</div>
         <div className="flex items-center gap-1">
           <button className="p-1 rounded hover:bg-gray-100" title="Cancelar" onClick={onCancel}>
             <X className="w-4 h-4" />
           </button>
-          <button
-            className="p-1 rounded hover:bg-gray-100"
-            title="Guardar"
-            onClick={() => onSave({ name, room, dx, proc })}
-          >
+          <button className="p-1 rounded hover:bg-gray-100" title="Guardar" onClick={() => onSave({ name, room, dx, proc })}>
             <Save className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* Nombre/ID grande a todo el ancho */}
+      {/* Nombre/ID grande */}
       <label className="text-xs">
         Nombre/ID (evitar nombre completo)
         <input
@@ -143,7 +124,6 @@ function InlineEditorCard({
         />
       </label>
 
-      {/* Resto en dos columnas */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         <label className="text-xs">
           Habitación
@@ -173,9 +153,7 @@ function InlineEditorCard({
             onChange={(e) => setProc(e.target.value as ProcKey)}
           >
             {PROCS.map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
+              <option key={o} value={o}>{o}</option>
             ))}
           </select>
         </label>
@@ -184,66 +162,36 @@ function InlineEditorCard({
   );
 }
 
-/* ------------------------------- página ------------------------------ */
+/* -------------------- página -------------------- */
 
 export default function Page() {
   const [sessionReady, setSessionReady] = useState(false);
   const [role, setRole] = useState<'editor' | 'viewer' | 'unknown'>('unknown');
 
-  // ▶️ Inicialización + escuchar cambios con *fallback* anti-atasco
+  // ✅ Versión estable y simple: sin timers, sin signOut automático
   useEffect(() => {
-    let stop = false;
-    let finished = false;
+    let cancelled = false;
 
-    const fallback = setTimeout(() => {
-      if (!finished && !stop) {
-        setRole('unknown');
-        setSessionReady(true);
-      }
-    }, 2500);
-
-    (async () => {
+    const apply = async () => {
       try {
-        setSessionReady(false);
-
-        // esperamos hasta 3s a que aparezca user
-        let userId: string | null = null;
-        for (let i = 0; i < 20; i++) {
-          const { data } = await supabase.auth.getUser();
-          if (data?.user?.id) {
-            userId = data.user.id;
-            break;
-          }
-          await new Promise((r) => setTimeout(r, 150));
-        }
-        if (stop) return;
-
-        if (userId) {
-          const r = await getMyRole();
-          if (stop) return;
-          setRole(r);
+        const { data } = await supabase.auth.getUser();
+        if (cancelled) return;
+        if (data?.user) {
+          const r = await getMyRole().catch(() => 'viewer' as const);
+          if (!cancelled) setRole(r);
         } else {
-          await supabase.auth.signOut({ scope: 'local' } as any);
-          clearLocalAuth();
           setRole('unknown');
         }
-        setSessionReady(true);
       } finally {
-        finished = true;
-        clearTimeout(fallback);
+        if (!cancelled) setSessionReady(true);
       }
-    })();
+    };
 
-    const { data: sub } = supabase.auth.onAuthStateChange(async () => {
-      if (stop) return;
-      const { data } = await supabase.auth.getUser();
-      setRole(data?.user ? await getMyRole() : 'unknown');
-      setSessionReady(true);
-    });
+    apply();
+    const { data: sub } = supabase.auth.onAuthStateChange(() => apply());
 
     return () => {
-      stop = true;
-      clearTimeout(fallback);
+      cancelled = true;
       sub.subscription.unsubscribe();
     };
   }, []);
@@ -256,25 +204,21 @@ export default function Page() {
   );
 }
 
-/* ------------------------------ cabecera ----------------------------- */
+/* -------------------- cabecera + auth -------------------- */
 
 function Header({ role }: { role: 'editor' | 'viewer' | 'unknown' }) {
   const [showChange, setShowChange] = useState(false);
 
   return (
     <div className="mb-4 flex justify-between items-center">
-      <div className="text-xl font-semibold">Agenda Hemodinámica — La Pizarra de Juan</div>
+      <div className="text-xl font-semibold">Agenda Hemodinámica — Pizarra semanal</div>
       <div className="flex gap-2 items-center">
         <span className="text-sm px-2 py-1 border rounded-full bg-white">
           {role === 'editor' ? 'Editor' : role === 'viewer' ? 'Solo lectura' : 'No autenticado'}
         </span>
 
         {role !== 'unknown' && (
-          <button
-            className="px-3 py-1 rounded border bg-white text-sm"
-            onClick={() => setShowChange(true)}
-            title="Cambiar contraseña"
-          >
+          <button className="px-3 py-1 rounded border bg-white text-sm" onClick={() => setShowChange(true)} title="Cambiar contraseña">
             Cambiar contraseña
           </button>
         )}
@@ -294,14 +238,11 @@ function AuthButtons() {
 
   const doLoginPassword = async () => {
     try {
-      if (!email || !password) {
-        alert('Introduce email y contraseña');
-        return;
-      }
+      if (!email || !password) return alert('Introduce email y contraseña');
       setBusy(true);
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      // refresco completo para asegurar estado consistente
+      // refresco completo tras login
       window.location.replace('/');
     } catch (e) {
       showErr(e);
@@ -312,10 +253,7 @@ function AuthButtons() {
 
   const sendReset = async () => {
     try {
-      if (!email) {
-        alert('Introduce tu email');
-        return;
-      }
+      if (!email) return alert('Introduce tu email');
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
       });
@@ -330,13 +268,10 @@ function AuthButtons() {
     try {
       setBusy(true);
       await supabase.auth.signOut({ scope: 'global' } as any);
-    } catch {
-      /* ignore */
-    } finally {
-      clearLocalAuth();
-      setBusy(false);
-      window.location.replace('/');
-    }
+    } catch {}
+    clearLocalAuth();
+    setBusy(false);
+    window.location.replace('/');
   };
 
   return (
@@ -358,29 +293,13 @@ function AuthButtons() {
         autoComplete="current-password"
         name="password"
       />
-      <button
-        className="px-3 py-1 rounded border bg-white text-sm disabled:opacity-60"
-        onClick={doLoginPassword}
-        disabled={busy}
-        title="Entrar con email y contraseña"
-      >
+      <button className="px-3 py-1 rounded border bg-white text-sm disabled:opacity-60" onClick={doLoginPassword} disabled={busy}>
         Entrar
       </button>
-
-      <button
-        className="px-3 py-1 rounded border bg-white text-sm"
-        onClick={sendReset}
-        title="Enviar correo para restablecer contraseña"
-      >
+      <button className="px-3 py-1 rounded border bg-white text-sm" onClick={sendReset}>
         ¿Olvidaste la contraseña?
       </button>
-
-      {/* siempre clicable para no “quedarse muerto” visualmente */}
-      <button
-        className="px-3 py-1 rounded border bg-white text-sm"
-        onClick={doLogout}
-        title="Cerrar sesión"
-      >
+      <button className="px-3 py-1 rounded border bg-white text-sm" onClick={doLogout} title="Cerrar sesión">
         Salir
       </button>
     </div>
@@ -395,39 +314,19 @@ function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      const e = data.user?.email ?? '';
-      setEmail(e);
-    });
+    supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? ''));
   }, []);
 
   const onSave = async () => {
     try {
-      if (!email) {
-        alert('No se pudo leer tu email de sesión. Vuelve a iniciar sesión.');
-        return;
-      }
-      if (!currentPwd || !newPwd) {
-        alert('Completa las contraseñas.');
-        return;
-      }
-      if (newPwd.length < 8) {
-        alert('La nueva contraseña debe tener al menos 8 caracteres.');
-        return;
-      }
-      if (newPwd !== confirmPwd) {
-        alert('La confirmación no coincide.');
-        return;
-      }
+      if (!email) return alert('No se pudo leer tu email de sesión.');
+      if (!currentPwd || !newPwd) return alert('Completa las contraseñas.');
+      if (newPwd.length < 8) return alert('La nueva contraseña debe tener al menos 8 caracteres.');
+      if (newPwd !== confirmPwd) return alert('La confirmación no coincide.');
 
       setBusy(true);
-
-      const { error: loginErr } = await supabase.auth.signInWithPassword({
-        email,
-        password: currentPwd,
-      });
+      const { error: loginErr } = await supabase.auth.signInWithPassword({ email, password: currentPwd });
       if (loginErr) throw loginErr;
-
       const { error } = await supabase.auth.updateUser({ password: newPwd });
       if (error) throw error;
 
@@ -515,7 +414,7 @@ function AuthBlock() {
   );
 }
 
-/* ------------------------------- tablero ------------------------------ */
+/* -------------------- tablero -------------------- */
 
 function Board({ role }: { role: 'editor' | 'viewer' }) {
   const [weekStart, setWeekStart] = useState<Date>(() => startOfWeekMonday(new Date()));
@@ -533,123 +432,64 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
     setItems(await listWeek(toISODate(weekStart)));
   }, [weekStart]);
 
-  useEffect(() => {
-    reload();
-  }, [reload]);
-
-  useEffect(() => {
-    const unsub = subscribeItems(reload);
-    return () => unsub();
-  }, [reload]);
+  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => { const unsub = subscribeItems(reload); return () => unsub(); }, [reload]);
 
   const canEdit = role === 'editor';
-
   const DAY_COL_WIDTH = 320;
   const FIRST_COL_WIDTH = 160;
   const minWidth = FIRST_COL_WIDTH + 5 * DAY_COL_WIDTH;
 
   function exportCSV() {
     const rows: string[] = [];
-    const header = ['Día', 'Sala/Turno', 'Orden', 'Nombre/ID', 'Habitación', 'Diagnóstico', 'Procedimiento', 'Finalizado'];
+    const header = ['Día','Sala/Turno','Orden','Nombre/ID','Habitación','Diagnóstico','Procedimiento','Finalizado'];
     rows.push(header.map(escapeCSV).join(','));
-
     for (const day of dayKeys) {
       for (const row of ROWS) {
-        const cell = items
-          .filter((i) => i.day === day && i.row === row)
-          .sort((a, b) => a.ord - b.ord);
+        const cell = items.filter(i => i.day === day && i.row === row).sort((a,b)=>a.ord-b.ord);
         cell.forEach((it, idx) => {
-          const line = [
-            day,
-            row,
-            String(idx + 1),
-            it.name ?? '',
-            it.room ?? '',
-            it.dx ?? '',
-            it.proc ?? '',
-            it.done ? 'Sí' : 'No',
-          ];
-          rows.push(line.map(escapeCSV).join(','));
+          rows.push([day,row,String(idx+1),it.name??'',it.room??'',it.dx??'',it.proc??'',it.done?'Sí':'No'].map(escapeCSV).join(','));
         });
       }
     }
-
-    const blob = new Blob(['\uFEFF' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF'+rows.join('\n')], { type:'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `pizarra_${dayKeys[0]}_a_${dayKeys[4]}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const a = document.createElement('a'); a.href = url; a.download = `pizarra_${dayKeys[0]}_a_${dayKeys[4]}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   }
 
-  /** Mover una posición hacia arriba (swap) usando parking INTEGER */
   const moveOneUp = async (it: Item) => {
-    const cell = items.filter((i) => i.day === it.day && i.row === it.row).sort((a, b) => a.ord - b.ord);
-    const idx = cell.findIndex((i) => i.id === it.id);
-    if (idx <= 0) return;
-
-    const prev = cell[idx - 1];
-    const oldItOrd = it.ord;
-    const oldPrevOrd = prev.ord;
-
-    const minOrd = cell[0]?.ord ?? 0;
-    const PARK = minOrd - 100000;
-
-    try {
-      await updateItem(it.id, { ord: PARK });
-      await updateItem(prev.id, { ord: oldItOrd });
-      await updateItem(it.id, { ord: oldPrevOrd });
-    } catch (e) {
-      showErr(e);
-    }
+    const cell = items.filter(i => i.day===it.day && i.row===it.row).sort((a,b)=>a.ord-b.ord);
+    const idx = cell.findIndex(i => i.id===it.id); if (idx<=0) return;
+    const prev = cell[idx-1]; const oldIt = it.ord; const oldPrev = prev.ord;
+    const minOrd = cell[0]?.ord ?? 0; const PARK = minOrd - 100000;
+    try { await updateItem(it.id,{ord:PARK}); await updateItem(prev.id,{ord:oldIt}); await updateItem(it.id,{ord:oldPrev}); }
+    catch(e){ showErr(e); }
   };
-
-  /** Mover una posición hacia abajo (swap) usando parking INTEGER */
   const moveOneDown = async (it: Item) => {
-    const cell = items.filter((i) => i.day === it.day && i.row === it.row).sort((a, b) => a.ord - b.ord);
-    const idx = cell.findIndex((i) => i.id === it.id);
-    if (idx === -1 || idx >= cell.length - 1) return;
-
-    const next = cell[idx + 1];
-    const oldItOrd = it.ord;
-    const oldNextOrd = next.ord;
-
-    const maxOrd = cell[cell.length - 1]?.ord ?? 0;
-    const PARK = maxOrd + 100000;
-
-    try {
-      await updateItem(it.id, { ord: PARK });
-      await updateItem(next.id, { ord: oldItOrd });
-      await updateItem(it.id, { ord: oldNextOrd });
-    } catch (e) {
-      showErr(e);
-    }
+    const cell = items.filter(i => i.day===it.day && i.row===it.row).sort((a,b)=>a.ord-b.ord);
+    const idx = cell.findIndex(i => i.id===it.id); if (idx<0 || idx>=cell.length-1) return;
+    const next = cell[idx+1]; const oldIt = it.ord; const oldNext = next.ord;
+    const maxOrd = cell[cell.length-1]?.ord ?? 0; const PARK = maxOrd + 100000;
+    try { await updateItem(it.id,{ord:PARK}); await updateItem(next.id,{ord:oldIt}); await updateItem(it.id,{ord:oldNext}); }
+    catch(e){ showErr(e); }
   };
 
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <button className="px-2 py-1 border rounded bg-white" onClick={() => setWeekStart(addDays(weekStart, -7))}>
+        <button className="px-2 py-1 border rounded bg-white" onClick={() => setWeekStart(addDays(weekStart,-7))}>
           <ArrowLeft className="inline w-4 h-4" /> Semana anterior
         </button>
         <button className="px-2 py-1 border rounded bg-white" onClick={() => setWeekStart(startOfWeekMonday(new Date()))}>
           <Calendar className="inline w-4 h-4" /> Esta semana
         </button>
-        <button className="px-2 py-1 border rounded bg-white" onClick={() => setWeekStart(addDays(weekStart, 7))}>
+        <button className="px-2 py-1 border rounded bg-white" onClick={() => setWeekStart(addDays(weekStart,7))}>
           Siguiente semana <ArrowRight className="inline w-4 h-4" />
         </button>
 
-        <input
-          className="ml-auto border rounded px-2 py-1"
-          placeholder="Buscar…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-
-        <button className="px-2 py-1 border rounded bg-white flex items-center gap-1" onClick={exportCSV} title="Exportar semana en CSV">
+        <input className="ml-auto border rounded px-2 py-1" placeholder="Buscar…" value={search} onChange={(e)=>setSearch(e.target.value)} />
+        <button className="px-2 py-1 border rounded bg-white flex items-center gap-1" onClick={exportCSV}>
           <Download className="w-4 h-4" /> Exportar CSV
         </button>
       </div>
@@ -657,138 +497,70 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
       <div className="border rounded-lg overflow-x-auto touch-pan-x">
         <div style={{ minWidth }}>
           <div className="grid" style={{ gridTemplateColumns: `${FIRST_COL_WIDTH}px repeat(5, ${DAY_COL_WIDTH}px)` }}>
-            {/* Cabecera */}
             <div className="bg-gray-100 border-b px-3 py-2 font-medium sticky top-0 left-0 z-20">Sala/Turno</div>
-            {days.map((d, i) => {
-              const isToday = toISODate(d) === todayISO;
+            {days.map((d,i)=>{
+              const isToday = toISODate(d)===todayISO;
               return (
-                <div
-                  key={i}
-                  className={`border-b px-3 py-2 font-medium sticky top-0 z-10 ${isToday ? 'bg-red-50 text-red-700' : 'bg-gray-100'}`}
-                >
-                  {d.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: '2-digit' })}
+                <div key={i} className={`border-b px-3 py-2 font-medium sticky top-0 z-10 ${isToday?'bg-red-50 text-red-700':'bg-gray-100'}`}>
+                  {d.toLocaleDateString('es-ES',{weekday:'short',day:'2-digit',month:'2-digit'})}
                 </div>
               );
             })}
 
-            {/* Filas */}
-            {ROWS.map((row) => (
+            {ROWS.map((row)=>(
               <RowBlock
                 key={row}
                 row={row}
                 dayKeys={dayKeys}
                 items={items}
-                canEdit={canEdit}
+                canEdit={role==='editor'}
                 search={search}
                 draftCell={draftCell}
                 setDraftCell={setDraftCell}
                 editId={editId}
                 setEditId={setEditId}
                 todayISO={todayISO}
-                onAdd={(day) => {
-                  if (!canEdit) return;
-                  setDraftCell({ day, row });
-                }}
-                onSubmitAdd={async (day, values) => {
-                  if (!canEdit) return;
+                onAdd={(day)=>{ if(role!=='editor') return; setDraftCell({day,row}); }}
+                onSubmitAdd={async (day, values)=>{
+                  if (role!=='editor') return;
                   try {
-                    await addItem({
-                      name: values.name ?? '',
-                      room: values.room ?? '',
-                      dx: values.dx ?? '',
-                      proc: values.proc as ProcKey,
-                      day,
-                      row,
-                    });
+                    await addItem({ name: values.name??'', room: values.room??'', dx: values.dx??'', proc: values.proc as ProcKey, day, row });
                     setDraftCell(null);
-                  } catch (e) {
-                    showErr(e);
-                  }
+                  } catch(e){ showErr(e); }
                 }}
-                onCancelAdd={() => setDraftCell(null)}
-                onSaveEdit={async (it, values) => {
+                onCancelAdd={()=>setDraftCell(null)}
+                onSaveEdit={async (it, values)=>{
                   try {
-                    await updateItem(it.id, {
-                      name: values.name,
-                      room: values.room,
-                      dx: values.dx,
-                      proc: values.proc,
-                    });
+                    await updateItem(it.id, { name: values.name, room: values.room, dx: values.dx, proc: values.proc });
                     setEditId(null);
-                  } catch (e) {
-                    showErr(e);
-                  }
+                  } catch(e){ showErr(e); }
                 }}
-                onMoveUp={async (it) => {
-                  if (!canEdit) return;
-                  await moveOneUp(it);
-                }}
-                onMoveDown={async (it) => {
-                  if (!canEdit) return;
-                  await moveOneDown(it);
-                }}
-                onMoveLeft={async (it) => {
-                  if (!canEdit) return;
-                  try {
-                    const idx = dayKeys.indexOf(it.day);
-                    const nx = ((idx - 1) % dayKeys.length + dayKeys.length) % dayKeys.length; // wrap
-                    const max = await getMaxOrd(dayKeys[nx], it.row);
-                    await updateItem(it.id, { day: dayKeys[nx], ord: max + 10 });
-                  } catch (e) {
-                    showErr(e);
-                  }
-                }}
-                onMoveRight={async (it) => {
-                  if (!canEdit) return;
-                  try {
-                    const idx = dayKeys.indexOf(it.day);
-                    const nx = (idx + 1) % dayKeys.length; // wrap
-                    const max = await getMaxOrd(dayKeys[nx], it.row);
-                    await updateItem(it.id, { day: dayKeys[nx], ord: max + 10 });
-                  } catch (e) {
-                    showErr(e);
-                  }
-                }}
-                onMoveRowUp={async (it) => {
-                  if (!canEdit) return;
-                  try {
-                    const rIdx = ROWS.indexOf(it.row);
-                    if (rIdx <= 0) return;
-                    const destRow = ROWS[rIdx - 1] as RowKey;
-                    const max = await getMaxOrd(it.day, destRow);
-                    await updateItem(it.id, { row: destRow, ord: max + 10 });
-                  } catch (e) {
-                    showErr(e);
-                  }
-                }}
-                onMoveRowDown={async (it) => {
-                  if (!canEdit) return;
-                  try {
-                    const rIdx = ROWS.indexOf(it.row);
-                    if (rIdx >= ROWS.length - 1) return;
-                    const destRow = ROWS[rIdx + 1] as RowKey;
-                    const max = await getMaxOrd(it.day, destRow);
-                    await updateItem(it.id, { row: destRow, ord: max + 10 });
-                  } catch (e) {
-                    showErr(e);
-                  }
-                }}
-                onDelete={async (it) => {
-                  if (!canEdit) return;
-                  try {
-                    if (confirm('Eliminar paciente?')) await deleteItem(it.id);
-                  } catch (e) {
-                    showErr(e);
-                  }
-                }}
-                onToggleDone={async (it) => {
-                  if (!canEdit) return;
-                  try {
-                    await updateItem(it.id, { done: !it.done });
-                  } catch (e) {
-                    showErr(e);
-                  }
-                }}
+                onMoveUp={async (it)=>{ if(role!=='editor') return; await moveOneUp(it); }}
+                onMoveDown={async (it)=>{ if(role!=='editor') return; await moveOneDown(it); }}
+                onMoveLeft={async (it)=>{ if(role!=='editor') return; try{
+                  const idx = dayKeys.indexOf(it.day); const nx = ((idx-1)%dayKeys.length + dayKeys.length)%dayKeys.length;
+                  const max = await getMaxOrd(dayKeys[nx], it.row); await updateItem(it.id,{ day: dayKeys[nx], ord: max+10 });
+                }catch(e){ showErr(e); }}}
+                onMoveRight={async (it)=>{ if(role!=='editor') return; try{
+                  const idx = dayKeys.indexOf(it.day); const nx = (idx+1)%dayKeys.length;
+                  const max = await getMaxOrd(dayKeys[nx], it.row); await updateItem(it.id,{ day: dayKeys[nx], ord: max+10 });
+                }catch(e){ showErr(e); }}}
+                onMoveRowUp={async (it)=>{ if(role!=='editor') return; try{
+                  const rIdx = ROWS.indexOf(it.row); if (rIdx<=0) return;
+                  const destRow = ROWS[rIdx-1] as RowKey; const max = await getMaxOrd(it.day, destRow);
+                  await updateItem(it.id,{ row: destRow, ord: max+10 });
+                }catch(e){ showErr(e); }}}
+                onMoveRowDown={async (it)=>{ if(role!=='editor') return; try{
+                  const rIdx = ROWS.indexOf(it.row); if (rIdx>=ROWS.length-1) return;
+                  const destRow = ROWS[rIdx+1] as RowKey; const max = await getMaxOrd(it.day, destRow);
+                  await updateItem(it.id,{ row: destRow, ord: max+10 });
+                }catch(e){ showErr(e); }}}
+                onDelete={async (it)=>{ if(role!=='editor') return; try{
+                  if (confirm('Eliminar paciente?')) await deleteItem(it.id);
+                }catch(e){ showErr(e); }}}
+                onToggleDone={async (it)=>{ if(role!=='editor') return; try{
+                  await updateItem(it.id,{ done: !it.done });
+                }catch(e){ showErr(e); }}}
               />
             ))}
           </div>
@@ -798,7 +570,7 @@ function Board({ role }: { role: 'editor' | 'viewer' }) {
   );
 }
 
-/* ------------------------------- helpers ------------------------------ */
+/* -------------------- helpers -------------------- */
 
 function escapeCSV(s: string): string {
   const needs = /[",\n]/.test(s);
@@ -806,32 +578,9 @@ function escapeCSV(s: string): string {
   return needs ? `"${t}"` : t;
 }
 
-/* ------------------------------ subcomponentes ------------------------------ */
+/* -------------------- subcomponentes -------------------- */
 
-function RowBlock({
-  row,
-  dayKeys,
-  items,
-  canEdit,
-  search,
-  draftCell,
-  setDraftCell,
-  editId,
-  setEditId,
-  todayISO,
-  onAdd,
-  onSubmitAdd,
-  onCancelAdd,
-  onSaveEdit,
-  onMoveUp,
-  onMoveDown,
-  onMoveLeft,
-  onMoveRight,
-  onMoveRowUp,
-  onMoveRowDown,
-  onDelete,
-  onToggleDone,
-}: {
+function RowBlock(props: {
   row: RowKey;
   dayKeys: string[];
   items: Item[];
@@ -855,6 +604,13 @@ function RowBlock({
   onDelete: (it: Item) => void;
   onToggleDone: (it: Item) => void;
 }) {
+  const {
+    row, dayKeys, items, canEdit, search, draftCell, setDraftCell, editId, setEditId, todayISO,
+    onAdd, onSubmitAdd, onCancelAdd, onSaveEdit,
+    onMoveUp, onMoveDown, onMoveLeft, onMoveRight, onMoveRowUp, onMoveRowDown,
+    onDelete, onToggleDone
+  } = props;
+
   return (
     <>
       <div className="bg-gray-100 border-r px-3 py-3 font-semibold sticky left-0 z-10">{row}</div>
@@ -944,67 +700,39 @@ function CardItem({
   onToggleDone: () => void;
   onDelete: () => void;
 }) {
-  const containerCls = `rounded-xl border p-3 flex flex-col gap-2 shadow-sm ${
-    it.done ? 'bg-gray-100 border-gray-300 text-gray-600' : 'bg-white'
-  }`;
+  const containerCls =
+    `rounded-xl border p-3 flex flex-col gap-2 shadow-sm ${it.done ? 'bg-gray-100 border-gray-300 text-gray-600' : 'bg-white'}`;
 
   return (
     <div className={containerCls}>
-      {/* Línea superior con orden, nombre y controles */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-6 h-6 rounded-full border flex items-center justify-center text-xs font-medium">{idx + 1}</div>
           <div className="text-sm font-semibold truncate" title={it.name ?? ''}>
             {it.name || '(sin nombre)'}
           </div>
-          {it.done && (
-            <span className="ml-2 px-2 py-0.5 rounded-full text-[11px] border bg-gray-200">Finalizado</span>
-          )}
+          {it.done && <span className="ml-2 px-2 py-0.5 rounded-full text-[11px] border bg-gray-200">Finalizado</span>}
         </div>
 
         {canEdit && (
           <div className="flex items-center gap-1">
-            {/* Finalizar / Reabrir */}
-            <button
-              className="p-1 rounded hover:bg-gray-100"
-              onClick={onToggleDone}
-              title={it.done ? 'Marcar como pendiente' : 'Marcar como finalizado'}
-            >
+            <button className="p-1 rounded hover:bg-gray-100" onClick={onToggleDone} title={it.done ? 'Marcar como pendiente' : 'Marcar como finalizado'}>
               {it.done ? <CheckCircle2 className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
             </button>
 
-            {/* Mover entre días/salas/orden */}
-            <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveLeft} title="Día anterior (wrap)">
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-            <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveUp} title="Subir orden (una posición)">
-              <ArrowUp className="w-4 h-4" />
-            </button>
-            <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveDown} title="Bajar orden (una posición)">
-              <ArrowDown className="w-4 h-4" />
-            </button>
-            <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveRowUp} title="Pasar a sala anterior">
-              <ChevronsUp className="w-4 h-4" />
-            </button>
-            <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveRowDown} title="Pasar a sala siguiente">
-              <ChevronsDown className="w-4 h-4" />
-            </button>
-            <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveRight} title="Día siguiente (wrap)">
-              <ArrowRight className="w-4 h-4" />
-            </button>
+            <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveLeft} title="Día anterior (wrap)"><ArrowLeft className="w-4 h-4" /></button>
+            <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveUp} title="Subir orden (una posición)"><ArrowUp className="w-4 h-4" /></button>
+            <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveDown} title="Bajar orden (una posición)"><ArrowDown className="w-4 h-4" /></button>
+            <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveRowUp} title="Pasar a sala anterior"><ChevronsUp className="w-4 h-4" /></button>
+            <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveRowDown} title="Pasar a sala siguiente"><ChevronsDown className="w-4 h-4" /></button>
+            <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveRight} title="Día siguiente (wrap)"><ArrowRight className="w-4 h-4" /></button>
 
-            {/* Editar / Eliminar */}
-            <button className="p-1 rounded hover:bg-gray-100" onClick={onEdit} title="Editar">
-              <Pencil className="w-4 h-4" />
-            </button>
-            <button className="p-1 rounded hover:bg-gray-100" onClick={onDelete} title="Eliminar">
-              <Trash2 className="w-4 h-4" />
-            </button>
+            <button className="p-1 rounded hover:bg-gray-100" onClick={onEdit} title="Editar"><Pencil className="w-4 h-4" /></button>
+            <button className="p-1 rounded hover:bg-gray-100" onClick={onDelete} title="Eliminar"><Trash2 className="w-4 h-4" /></button>
           </div>
         )}
       </div>
 
-      {/* Chips inferiores */}
       <div className={`flex flex-wrap gap-2 text-xs ${it.done ? 'text-gray-500' : 'text-gray-600'}`}>
         {it.room && <span className="px-2 py-0.5 rounded border bg-gray-50">Hab: {it.room}</span>}
         {it.dx && <span className="px-2 py-0.5 rounded border bg-gray-50">Dx: {it.dx}</span>}
