@@ -182,33 +182,46 @@ export default function Page() {
 
   // ▶️ Inicialización + escuchar cambios de autenticación
   useEffect(() => {
-    let cancelled = false;
+  let cancelled = false;
 
-    const load = async () => {
-      await supabase.auth.getSession();
-      if (!cancelled) setSessionReady(true);
-      // recalcular rol al montar
+  const load = async () => {
+    const { data: session } = await supabase.auth.getSession();
+    const hasUser = !!session?.session?.user;
+
+    if (!cancelled) setSessionReady(true);
+
+    // Si hay usuario, pinta provisionalmente "viewer" para no quedar atascados
+    if (hasUser && !cancelled) {
+      setRole((prev) => (prev === 'unknown' ? 'viewer' : prev));
+    }
+
+    // Recalcula el rol real (editor o viewer). Si falla, mantenemos viewer.
+    try {
       const r = await getMyRole();
       if (!cancelled) setRole(r);
-    };
-    load();
+    } catch {
+      if (!cancelled && hasUser) setRole('viewer');
+    }
+  };
 
-    const { data: sub } = supabase.auth.onAuthStateChange(async () => {
-      if (!cancelled) setSessionReady(true);
-      const r = await getMyRole();
-      if (!cancelled) setRole(r);
-    });
+  load();
 
-    return () => {
-      cancelled = true;
-      sub.subscription.unsubscribe();
-    };
-  }, []);
+  const { data: sub } = supabase.auth.onAuthStateChange(async () => {
+    // Tras cualquier cambio de auth, repetimos la lógica
+    await load();
+  });
+
+  return () => {
+    cancelled = true;
+    sub.subscription.unsubscribe();
+  };
+}, []);
 
   return (
     <div className="p-4 max-w-[1200px] mx-auto">
-      <Header role={role} />
-      {role === 'unknown' ? <AuthBlock /> : <Board role={role} />}
+    <Header role={role} />
+    {!sessionReady && <div className="text-sm text-gray-500">Cargando sesión…</div>}
+    {sessionReady && (role === 'editor' || role === 'viewer') ? <Board role={role} /> : <AuthBlock />}
     </div>
   );
 }
@@ -257,32 +270,27 @@ function AuthButtons() {
     setBusy(true);
 
     // 1) Login
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
 
-    // 2) Espera breve para que la sesión se persista en localStorage (evita carrera)
+    // 2) Pequeña espera para que el SDK persista la sesión en localStorage
     await new Promise((r) => setTimeout(r, 150));
 
-    // 3) Verifica que ya hay usuario en memoria
+    // 3) Verificamos que ya hay usuario
     const { data: userData } = await supabase.auth.getUser();
     if (!userData?.user) {
       throw new Error('No se pudo obtener sesión tras el login. Prueba de nuevo.');
     }
 
-    // 4) Opcional: re-evalúa rol ya, sin esperar al listener
-    try {
-      // si getMyRole falla por cualquier motivo, no bloqueamos la navegación
-      await getMyRole();
-    } catch {}
-
-    // 5) Refresco completo para forzar UI consistente
-    window.location.replace('/');
+    // 4) Recarga completa
+    window.location.replace('/'); // o window.location.reload();
   } catch (e) {
     showErr(e);
   } finally {
     setBusy(false);
   }
 };
+
 
 
   const sendReset = async () => {
