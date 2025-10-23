@@ -680,9 +680,3 @@ function CardItem({
     </div>
   );
 }
-useEffect(() => {
-  const id = setInterval(() => {
-    supabase.auth.getSession().catch(() => {});
-  }, 120000); // 2 min
-  return () => clearInterval(id);
-}, []);
