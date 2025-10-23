@@ -578,34 +578,59 @@ function RowBlock({
   );
 }
 
+// === REEMPLAZA tu CardItem por este ===
 function CardItem({
-  it, idx, canEdit, onEdit,
-  onMoveUp, onMoveDown, onMoveLeft, onMoveRight, onMoveRowUp, onMoveRowDown,
-  onToggleDone, onDelete,
+  it,
+  idx,
+  canEdit,
+  onEdit,
+  onMoveUp,
+  onMoveDown,
+  onMoveLeft,
+  onMoveRight,
+  onMoveRowUp,
+  onMoveRowDown,
+  onToggleDone,
+  onDelete,
 }: {
-  it: Item; idx: number; canEdit: boolean; onEdit: () => void;
-  onMoveUp: () => void; onMoveDown: () => void; onMoveLeft: () => void; onMoveRight: () => void;
-  onMoveRowUp: () => void; onMoveRowDown: () => void; onToggleDone: () => void; onDelete: () => void;
+  it: Item;
+  idx: number;
+  canEdit: boolean;
+  onEdit: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onMoveLeft: () => void;
+  onMoveRight: () => void;
+  onMoveRowUp: () => void;
+  onMoveRowDown: () => void;
+  onToggleDone: () => void;
+  onDelete: () => void;
 }) {
   const containerCls =
-    `rounded-xl border p-3 flex flex-col gap-2 shadow-sm ${it.done ? 'bg-gray-100 border-gray-300 text-gray-600' : 'bg-white'}`;
+    `rounded-xl border p-3 flex flex-col gap-2 shadow-sm ${
+      it.done ? 'bg-gray-100 border-gray-300 text-gray-600' : 'bg-white'
+    }`;
 
   return (
     <div className={containerCls}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="w-6 h-6 rounded-full border flex items-center justify-center text-xs font-medium">{idx + 1}</div>
-          <div className="text-sm font-semibold truncate" title={it.name ?? ''}>{it.name || '(sin nombre)'}</div>
-          {it.done && <span className="ml-2 px-2 py-0.5 rounded-full text-[11px] border bg-gray-200">Finalizado</span>}
+      {/* Fila 1: Orden + CONTROLES (todo aquí arriba) */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="w-6 h-6 rounded-full border flex items-center justify-center text-xs font-medium shrink-0">
+          {idx + 1}
         </div>
 
         {canEdit && (
-          <div className="flex items-center gap-1">
-            <button className="p-1 rounded hover:bg-gray-100" onClick={onToggleDone}
-                    title={it.done ? 'Marcar como pendiente' : 'Marcar como finalizado'}>
+          <div className="flex flex-wrap items-center gap-1 justify-end w-full">
+            {/* Finalizar / Reabrir */}
+            <button
+              className="p-1 rounded hover:bg-gray-100"
+              onClick={onToggleDone}
+              title={it.done ? 'Marcar como pendiente' : 'Marcar como finalizado'}
+            >
               {it.done ? <CheckCircle2 className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
             </button>
 
+            {/* Mover entre días / orden / salas */}
             <button className="p-1 rounded hover:bg-gray-100" onClick={onMoveLeft} title="Día anterior (wrap)">
               <ArrowLeft className="w-4 h-4" />
             </button>
@@ -625,6 +650,7 @@ function CardItem({
               <ArrowRight className="w-4 h-4" />
             </button>
 
+            {/* Editar / Eliminar */}
             <button className="p-1 rounded hover:bg-gray-100" onClick={onEdit} title="Editar">
               <Pencil className="w-4 h-4" />
             </button>
@@ -635,7 +661,18 @@ function CardItem({
         )}
       </div>
 
-      <div className={`flex flex-wrap gap-2 text-xs ${it.done ? 'text-gray-500' : 'text-gray-600'}`}>
+      {/* Fila 2: NOMBRE a todo el ancho, grande y que haga wrap */}
+      <div className="mt-1 text-[15px] md:text-base font-semibold leading-snug break-words">
+        {it.name || '(sin nombre)'}
+        {it.done && (
+          <span className="ml-2 px-2 py-0.5 rounded-full text-[11px] border bg-gray-200 align-middle">
+            Finalizado
+          </span>
+        )}
+      </div>
+
+      {/* Fila 3: Chips (Hab, Dx, Procedimiento) */}
+      <div className={`mt-1 flex flex-wrap gap-2 text-xs ${it.done ? 'text-gray-500' : 'text-gray-600'}`}>
         {it.room && <span className="px-2 py-0.5 rounded border bg-gray-50">Hab: {it.room}</span>}
         {it.dx && <span className="px-2 py-0.5 rounded border bg-gray-50">Dx: {it.dx}</span>}
         <span className={`px-2 py-0.5 rounded border ${procColor(it.proc as ProcKey)}`}>{it.proc}</span>
