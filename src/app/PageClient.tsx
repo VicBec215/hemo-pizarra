@@ -186,7 +186,7 @@ export default function PageClient() {
 function Header({ role }: { role: 'editor' | 'viewer' | 'unknown' }) {
   return (
     <div className="mb-4 flex justify-between items-center">
-      <div className="text-xl font-semibold">Agenda Hemodinámica — Pizarra semanal</div>
+      <div className="text-xl font-semibold">Agenda Hemodinámica — La Pizarra de Juan</div>
       <div className="flex gap-2 items-center">
         <span className="text-sm px-2 py-1 border rounded-full bg-white">
           {role === 'editor' ? 'Editor' : role === 'viewer' ? 'Solo lectura' : 'No autenticado'}
@@ -680,3 +680,9 @@ function CardItem({
     </div>
   );
 }
+useEffect(() => {
+  const id = setInterval(() => {
+    supabase.auth.getSession().catch(() => {});
+  }, 120000); // 2 min
+  return () => clearInterval(id);
+}, []);
